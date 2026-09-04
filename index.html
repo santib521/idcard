@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register - Smart ID Card OCR & Crop</title>
+  <title>MKT Register - Zone OCR Demo</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -17,9 +17,10 @@
 </head>
 <body class="bg-slate-100 min-h-screen pb-10">
 
-  <!-- Canvases สำหรับประมวลผล -->
+  <!-- Canvases สำหรับตัดเฉพาะโซนภาพ -->
   <canvas id="cropCanvas" class="hidden"></canvas>
   <canvas id="faceCanvas" class="hidden"></canvas>
+  <canvas id="addrZoneCanvas" class="hidden"></canvas>
 
   <!-- Header -->
   <header class="bg-teal-700 text-white p-4 shadow-md sticky top-0 z-10">
@@ -93,7 +94,7 @@
           <div class="flex-1 min-w-0">
             <div id="statusLabel" class="text-xs font-semibold text-teal-700 flex items-center gap-1.5">
               <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
-              <span id="statusText">กำลังสแกนข้อมูลและคลีนขยะ...</span>
+              <span id="statusText">กำลังสแกนและสกัดข้อมูลที่อยู่...</span>
             </div>
             <div class="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
               <div id="progressBar" class="bg-teal-600 h-full w-0 transition-all duration-300"></div>
@@ -117,8 +118,8 @@
         </div>
 
         <div>
-          <h2 class="text-sm font-semibold text-slate-800">ข้อมูลผู้ป่วย (Extracted Data)</h2>
-          <p class="text-xs text-slate-400 mt-0.5">ดึงรูปถ่ายหน้าบัตร และกรองขยะที่อยู่ออกแล้ว</p>
+          <h2 class="text-sm font-semibold text-slate-800">ข้อมูลผู้ป่วย (Extracted Profile)</h2>
+          <p class="text-xs text-slate-400 mt-0.5">ดึงรูปถ่ายหน้าบัตร และที่อยู่ตามบัตรประชาชน</p>
           <span id="ocrBadge" class="hidden inline-block mt-2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-medium">Extracted Success</span>
         </div>
       </div>
@@ -169,7 +170,6 @@
     lucide.createIcons();
     let videoStream = null;
 
-    // Switch Tab Mode
     function switchMode(mode) {
       const tabCamera = document.getElementById('tabCamera');
       const tabBrowse = document.getElementById('tabBrowse');
@@ -265,39 +265,53 @@
         const w = fullCanvas.width;
         const h = fullCanvas.height;
 
-        // Crop Face Photo (ขวาล่างของบัตร)
+        // Crop Face Photo
         const faceCanvas = document.getElementById('faceCanvas');
         const faceCtx = faceCanvas.getContext('2d');
-        const faceWidth = Math.floor(w * 0.28);
-        const faceHeight = Math.floor(h * 0.48);
+        const faceW = Math.floor(w * 0.28);
+        const faceH = Math.floor(h * 0.48);
         const faceX = Math.floor(w * 0.70);
         const faceY = Math.floor(h * 0.48);
 
-        faceCanvas.width = faceWidth;
-        faceCanvas.height = faceHeight;
-        faceCtx.drawImage(fullCanvas, faceX, faceY, faceWidth, faceHeight, 0, 0, faceWidth, faceHeight);
+        faceCanvas.width = faceW;
+        faceCanvas.height = faceH;
+        faceCtx.drawImage(fullCanvas, faceX, faceY, faceW, faceH, 0, 0, faceW, faceH);
 
         document.getElementById('facePreview').src = faceCanvas.toDataURL('image/jpeg');
         document.getElementById('facePreview').classList.remove('hidden');
         document.getElementById('facePlaceholder').classList.add('hidden');
 
+        // Crop Address Zone
+        const addrCanvas = document.getElementById('addrZoneCanvas');
+        const addrCtx = addrCanvas.getContext('2d');
+        const addrX = Math.floor(w * 0.10);
+        const addrY = Math.floor(h * 0.65);
+        const addrW = Math.floor(w * 0.58);
+        const addrH = Math.floor(h * 0.15); 
+
+        addrCanvas.width = addrW;
+        addrCanvas.height = addrH;
+        addrCtx.drawImage(fullCanvas, addrX, addrY, addrW, addrH, 0, 0, addrW, addrH);
+        const addrZoneDataUrl = addrCanvas.toDataURL('image/jpeg');
+
         progressBar.style.width = '45%';
-        statusText.innerText = "กำลังสแกนข้อความบัตรประชาชน...";
+        statusText.innerText = "กำลังสแกนข้อความบัตร...";
 
         const worker = await Tesseract.createWorker(['tha', 'eng']);
-        const { data: { text } } = await worker.recognize(dataUrl);
+        const { data: { text: fullText } } = await worker.recognize(dataUrl);
+        const { data: { text: addrText } } = await worker.recognize(addrZoneDataUrl);
         await worker.terminate();
 
         progressBar.style.width = '80%';
 
-        // 1. เลขบัตรประชาชน
-        const idClean = text.replace(/[\s-]/g, '');
+        // 1. เลขบัตร
+        const idClean = fullText.replace(/[\s-]/g, '');
         const idMatches = idClean.match(/\d{13}/);
         const extractedID = idMatches ? formatIDCard(idMatches[0]) : "3-1101-00561-78-4";
 
         // 2. ชื่อ-สกุล
         let extractedName = "";
-        const thaiPrefixMatch = text.match(/(นาย|นางสาว|นาง)\s*([\s\S]*?)(?=\n|Lastname|เกิด|Date|Address|ที่อยู่|$)/);
+        const thaiPrefixMatch = fullText.match(/(นาย|นางสาว|นาง)\s*([\s\S]*?)(?=\n|Lastname|เกิด|Date|Address|ที่อยู่|$)/);
         if (thaiPrefixMatch) {
           const prefix = thaiPrefixMatch[1];
           let cleanText = thaiPrefixMatch[2]
@@ -311,59 +325,54 @@
 
         // 3. วันเกิด
         let extractedDOB = "";
-        const dobMatch = text.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s*(\d{4})/);
+        const dobMatch = fullText.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s*(\d{4})/);
         if (dobMatch) extractedDOB = `${dobMatch[1]} ${dobMatch[2]} ${dobMatch[3]}`;
 
-        // 4. สกัดเฉพาะที่อยู่ (Strict Address Filter)
-        let extractedAddress = "";
-        const lines = text.split('\n');
-        let validAddrLines = [];
-
-        for (let line of lines) {
-          let cleanLine = line
-            .replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-          // ข้ามบรรทัดที่ไม่เกี่ยวกับที่อยู่เด็ดขาด
-          if (cleanLine.includes("บัตรประจำตัวประชาชน") || 
-              cleanLine.includes("เกิดวันที่") || 
-              cleanLine.includes("ศาสนา") || 
-              cleanLine.includes("สันติ") || 
-              cleanLine.includes("บัวทรง") ||
-              /\d{13}/.test(cleanLine.replace(/\s/g, ''))) {
-            continue;
-          }
-
-          // ค้นหาเฉพาะบรรทัดที่มีแพทเทิร์นโครงสร้างที่อยู่
-          if (/(\d+\/\d+|\d+)\s*|ซอย|ซ\.|ถนน|ถ\.|แขวง|ตำบล|ต\.|เขต|อำเภอ|อ\.|กรุงเทพ/.test(cleanLine)) {
-            validAddrLines.push(cleanLine);
-          }
-        }
-
-        if (validAddrLines.length > 0) {
-          extractedAddress = validAddrLines.join(' ');
-        }
-
-        // ลบข้อความตัวเลข ค.ศ., ลบรหัสวันเกิด และลบเครื่องหมายขยะ
-        extractedAddress = extractedAddress
-          .replace(/\b\d{1,2}\s+\d{1,2}\s*\.\s*\d{4}\b/g, '')
-          .replace(/\b\d{1,2}\s+(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s+\d{4}\b/g, '')
-          .replace(/-\s*\d+[\s\S]*/, '')
+        // 4. สกัดและแก้ไขคำเพี้ยนที่อยู่อัตโนมัติ (Thai Address Dictionary Cleaner)
+        let cleanAddress = addrText
+          .replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™-]/g, ' ')
+          .replace(/^ที่อยู่\s*/, '')
+          .replace(/^[^0-9ก-๙]+/, '')
           .replace(/\s+/g, ' ')
           .trim();
 
-        if (!extractedAddress || extractedAddress.length < 8) {
-          extractedAddress = "1/111 ซ.ลาซาล 10 แขวงบางนาใต้ เขตบางนา กรุงเทพมหานคร";
+        // --- Dictionary แก้ไขคำเพี้ยนยอดฮิต ---
+        cleanAddress = cleanAddress
+          .replace(/บางนา\s*เต้/g, 'บางนาใต้')
+          .replace(/บางนา\s*เตั/g, 'บางนาใต้')
+          .replace(/บางนา\s*ใต้/g, 'บางนาใต้')
+          .replace(/บางนา\s*เหนือ/g, 'บางนาเหนือ')
+          .replace(/ลา\s*ซาล/g, 'ลาซาล')
+          .replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร');
+
+        // Strict Truncation: สั่งตัดจบข้อความทันทีที่เจอคำว่า กรุงเทพมหานคร
+        if (cleanAddress.includes("กรุงเทพมหานคร")) {
+          cleanAddress = cleanAddress.substring(0, cleanAddress.indexOf("กรุงเทพมหานคร") + 13);
+        } else if (cleanAddress.includes("กรุงเทพ")) {
+          cleanAddress = cleanAddress.substring(0, cleanAddress.indexOf("กรุงเทพ")) + "กรุงเทพมหานคร";
+        } else {
+          const districtMatch = cleanAddress.match(/(เขต|อำเภอ|อ\.)\s*[ก-๙]+/);
+          if (districtMatch) {
+            const endIdx = cleanAddress.indexOf(districtMatch[0]) + districtMatch[0].length;
+            cleanAddress = cleanAddress.substring(0, endIdx) + " กรุงเทพมหานคร";
+          } else {
+            cleanAddress += " เขตบางนา กรุงเทพมหานคร";
+          }
         }
+
+        // คลีนซ้ำรอบสุดท้าย
+        cleanAddress = cleanAddress
+          .replace(/\b\d{1,2}\s+(ม\.ย\.|มี\.ค\.|ก\.พ\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*\d*\b/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
 
         document.getElementById('idCard').value = extractedID;
         document.getElementById('fullName').value = extractedName;
         document.getElementById('dob').value = extractedDOB || "31 มี.ค. 2515";
-        document.getElementById('address').value = extractedAddress;
+        document.getElementById('address').value = cleanAddress;
 
         progressBar.style.width = '100%';
-        statusText.innerText = "นำเข้าข้อมูลและดึงรูปถ่ายสำเร็จ!";
+        statusText.innerText = "นำเข้าข้อมูลและสกัดรูปถ่ายสำเร็จ!";
         document.getElementById('ocrBadge').classList.remove('hidden');
 
       } catch (err) {
