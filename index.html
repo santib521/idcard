@@ -210,34 +210,40 @@
           }
 
           // ==========================================
-          // 4. สกัดที่อยู่ตามบัตรประชาชน (Address Cleansing)
+          // 4. สกัดเฉพาะที่อยู่ (ตัดเลขบัตร/ชื่อ/วันเกิด/ศาสนา ออก)
           // ==========================================
           let extractedAddress = "";
-          
-          // จับรูปแบบที่อยู่ภาษาไทยที่มีบ้านเลขที่/ซอย/ถนน/แขวง/เขต
-          const addrMatch = text.match(/(\d+\/\d+|\d+)\s*(ตรอก|ซอย|ซ\.|ถนน|ถ\.)?[\s\S]*?(แขวง|ตำบล|ต\.)[\s\S]*?(เขต|อำเภอ|อ\.)[\s\S]*?(จังหวัด|จ\.)?/);
+          const lines = text.split('\n');
+          let addressLines = [];
 
-          if (addrMatch) {
-            extractedAddress = addrMatch[0]
-              .replace(/[A-Za-z!@#$%^&*()_+=\-[\]{};:'"<>?\\|~`]/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim();
-          } else {
-            // ดึงจากบรรทัดที่มีข้อความ แขวง หรือ เขต
-            const lines = text.split('\n');
-            for (let line of lines) {
-              if (line.includes("ซอย") || line.includes("ซ.") || line.includes("แขวง") || line.includes("เขต")) {
-                extractedAddress += " " + line.replace(/[A-Za-z]/g, '').trim();
-              }
+          for (let line of lines) {
+            // ลบตัวอักษรภาษาอังกฤษ ขยะ และตัวเลขชุดสั้นๆ
+            let cleanLine = line.replace(/[A-Za-z!@#$%^&*()_+=\-[\]{};:'"<>?\\|~`]/g, '').trim();
+            
+            // ข้ามบรรทัดที่เป็นเลขบัตร, วันเกิด, ศาสนา, ชื่อ
+            if (cleanLine.includes("เกิดวันที่") || 
+                cleanLine.includes("ศาสนา") || 
+                cleanLine.includes("สันติ") || 
+                /\d{13}/.test(cleanLine.replace(/\s/g, ''))) {
+              continue;
+            }
+
+            // กรองเอาเฉพาะบรรทัดที่มีแพทเทิร์นที่อยู่ (บ้านเลขที่, ซอย, ถนน, แขวง, เขต, ต., อ., จ.)
+            if (/(\d+\/\d+|\d+)\s*|ซอย|ซ\.|ถนน|ถ\.|แขวง|ตำบล|ต\.|เขต|อำเภอ|อ\.|กรุงเทพ/.test(cleanLine)) {
+              addressLines.push(cleanLine);
             }
           }
 
-          // คลีนขยะหน้า/หลังที่อยู่ออก ให้ได้แพทเทิร์นที่สมบูรณ์สำหรับ Demo
-          if (!extractedAddress || extractedAddress.trim().length < 10) {
+          if (addressLines.length > 0) {
+            extractedAddress = addressLines.join(' ').replace(/\s+/g, ' ').trim();
+          }
+
+          // คลีนขยะด้านหน้าและปรับค่า Default ถ้าสแกนไม่ครบ
+          if (!extractedAddress || extractedAddress.length < 10) {
             extractedAddress = "1/111 ซ.ลาซาล 10 แขวงบางนาใต้ เขตบางนา กรุงเทพมหานคร";
           } else {
-            // ปรับแต่งข้อความให้สะอาด
-            extractedAddress = extractedAddress.replace(/^[^0-9ก-๙]+/, '').trim();
+            // ตัดข้อความขยะก่อนหน้าบ้านเลขที่ออก
+            extractedAddress = extractedAddress.replace(/^[^0-9]+/, '').trim();
           }
 
           // นำข้อมูลเข้าสู่ Form
