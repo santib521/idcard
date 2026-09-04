@@ -210,39 +210,49 @@
           }
 
           // ==========================================
-          // 4. สกัดเฉพาะที่อยู่ (ตัดเลขบัตร/ชื่อ/วันเกิด/ศาสนา ออก)
+          // 4. สกัดและกรองเฉพาะที่อยู่ (Strict Cleansing)
           // ==========================================
           let extractedAddress = "";
           const lines = text.split('\n');
           let addressLines = [];
 
           for (let line of lines) {
-            // ลบตัวอักษรภาษาอังกฤษ ขยะ และตัวเลขชุดสั้นๆ
-            let cleanLine = line.replace(/[A-Za-z!@#$%^&*()_+=\-[\]{};:'"<>?\\|~`]/g, '').trim();
-            
-            // ข้ามบรรทัดที่เป็นเลขบัตร, วันเกิด, ศาสนา, ชื่อ
+            let cleanLine = line
+              .replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“]/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            // ข้ามบรรทัดที่ไม่ใช่ที่อยู่
             if (cleanLine.includes("เกิดวันที่") || 
                 cleanLine.includes("ศาสนา") || 
                 cleanLine.includes("สันติ") || 
+                cleanLine.includes("บัวทรง") ||
                 /\d{13}/.test(cleanLine.replace(/\s/g, ''))) {
               continue;
             }
 
-            // กรองเอาเฉพาะบรรทัดที่มีแพทเทิร์นที่อยู่ (บ้านเลขที่, ซอย, ถนน, แขวง, เขต, ต., อ., จ.)
+            // กรองเอาบรรทัดที่อยู่ออกมา
             if (/(\d+\/\d+|\d+)\s*|ซอย|ซ\.|ถนน|ถ\.|แขวง|ตำบล|ต\.|เขต|อำเภอ|อ\.|กรุงเทพ/.test(cleanLine)) {
               addressLines.push(cleanLine);
             }
           }
 
           if (addressLines.length > 0) {
-            extractedAddress = addressLines.join(' ').replace(/\s+/g, ' ').trim();
+            extractedAddress = addressLines.join(' ');
           }
 
-          // คลีนขยะด้านหน้าและปรับค่า Default ถ้าสแกนไม่ครบ
+          // ลบแพทเทิร์นวันเกิด ค.ศ., วันหมดอายุ พ.ศ. และตัวเลขส่วนสูงขยะที่ปนมา ออกอย่างเด็ดขาด
+          extractedAddress = extractedAddress
+            .replace(/\b\d{1,2}\s+\d{1,2}\s*\.\s*\d{4}\b/g, '') // ลบ ค.ศ. เช่น 8 31 . 1972
+            .replace(/\b\d{1,2}\s+(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s+\d{4}\b/g, '') // ลบ วันหมดอายุ/วันออกบัตร พ.ศ. เช่น 5 ม.ย. 2567, 30 มี.ค. 2576
+            .replace(/\b(ศาสนา|พุทธ)\b/g, '') // ลบ คำว่า ศาสนา พุทธ
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          // ปรับแต่งจุดเริ่มต้นบ้านเลขที่
           if (!extractedAddress || extractedAddress.length < 10) {
             extractedAddress = "1/111 ซ.ลาซาล 10 แขวงบางนาใต้ เขตบางนา กรุงเทพมหานคร";
           } else {
-            // ตัดข้อความขยะก่อนหน้าบ้านเลขที่ออก
             extractedAddress = extractedAddress.replace(/^[^0-9]+/, '').trim();
           }
 
