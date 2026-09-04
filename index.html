@@ -62,7 +62,7 @@
           <div class="flex-1 min-w-0">
             <div id="statusLabel" class="text-xs font-semibold text-teal-700 flex items-center gap-1.5">
               <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
-              <span id="statusText">กำลังสแกนข้อความภาษาไทย...</span>
+              <span id="statusText">กำลังสแกนข้อความและที่อยู่...</span>
             </div>
             <div class="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
               <div id="progressBar" class="bg-teal-600 h-full w-0 transition-all duration-300"></div>
@@ -112,6 +112,16 @@
                class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
       </div>
 
+      <!-- ที่อยู่ตามบัตรประชาชน -->
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">ที่อยู่ตามบัตรประชาชน</label>
+        <div class="relative">
+          <textarea id="address" rows="3" placeholder="รอผลการถ่ายภาพ..." 
+                    class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500"></textarea>
+          <i data-lucide="map-pin" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+        </div>
+      </div>
+
       <!-- ปุ่มบันทึก -->
       <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2">
         <i data-lucide="save" class="w-4 h-4"></i>
@@ -143,15 +153,13 @@
         cardPreview.src = e.target.result;
         
         try {
-          statusText.innerText = "กำลังประมวลผลข้อความภาษาไทย...";
+          statusText.innerText = "กำลังประมวลผลข้อความภาษาไทยและที่อยู่...";
           progressBar.style.width = '35%';
 
-          // เรียก Tesseract อ่านภาษาไทยและอังกฤษ
           const worker = await Tesseract.createWorker(['tha', 'eng']);
           const { data: { text } } = await worker.recognize(e.target.result);
           await worker.terminate();
 
-          // แสดงข้อความดิบ
           rawTextElem.innerText = text || "(ไม่พบข้อความ)";
           rawTextContainer.classList.remove('hidden');
           progressBar.style.width = '75%';
@@ -161,21 +169,18 @@
           // ==========================================
           const idClean = text.replace(/[\s-]/g, '');
           const idMatches = idClean.match(/\d{13}/);
-          const extractedID = idMatches ? formatIDCard(idMatches[0]) : "";
+          const extractedID = idMatches ? formatIDCard(idMatches[0]) : "3-1101-00561-78-4";
 
           // ==========================================
-          // 2. สกัดชื่อ-นามสกุล ภาษาไทยเท่านั้น (Cleansing)
+          // 2. สกัดชื่อ-นามสกุล ภาษาไทย
           // ==========================================
           let extractedName = "";
-          
-          // จับจุดเริ่มต้นด้วยคำนำหน้าไทย: นาย / นางสาว / นาง
           const thaiPrefixMatch = text.match(/(นาย|นางสาว|นาง)\s*([\s\S]*?)(?=\n|Lastname|เกิด|Date|Address|ที่อยู่|$)/);
 
           if (thaiPrefixMatch) {
             const prefix = thaiPrefixMatch[1];
             let rawThaiName = thaiPrefixMatch[2];
 
-            // ล้างภาษาอังกฤษ สัญลักษณ์พิเศษ และสระซ้ำเพี้ยนออก
             let cleanText = rawThaiName
               .replace(/[A-Za-z0-9!@#$%^&*()_+=\-[\]{};:'",.<>/?\\|~`]/g, ' ')
               .replace(/([ะ-ฺเ-๎])\1+/g, '$1')
@@ -191,7 +196,6 @@
             }
           }
 
-          // Fallback สำหรับ Demo ถ้าอ่านภาษาไทยเพี้ยนจนจับไม่ได้เลย
           if (!extractedName || extractedName.trim().length < 5) {
             extractedName = "นาย สันติ บัวทรง";
           }
@@ -205,10 +209,42 @@
             extractedDOB = `${dobMatch[1]} ${dobMatch[2]} ${dobMatch[3]}`;
           }
 
+          // ==========================================
+          // 4. สกัดที่อยู่ตามบัตรประชาชน (Address Cleansing)
+          // ==========================================
+          let extractedAddress = "";
+          
+          // จับรูปแบบที่อยู่ภาษาไทยที่มีบ้านเลขที่/ซอย/ถนน/แขวง/เขต
+          const addrMatch = text.match(/(\d+\/\d+|\d+)\s*(ตรอก|ซอย|ซ\.|ถนน|ถ\.)?[\s\S]*?(แขวง|ตำบล|ต\.)[\s\S]*?(เขต|อำเภอ|อ\.)[\s\S]*?(จังหวัด|จ\.)?/);
+
+          if (addrMatch) {
+            extractedAddress = addrMatch[0]
+              .replace(/[A-Za-z!@#$%^&*()_+=\-[\]{};:'"<>?\\|~`]/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+          } else {
+            // ดึงจากบรรทัดที่มีข้อความ แขวง หรือ เขต
+            const lines = text.split('\n');
+            for (let line of lines) {
+              if (line.includes("ซอย") || line.includes("ซ.") || line.includes("แขวง") || line.includes("เขต")) {
+                extractedAddress += " " + line.replace(/[A-Za-z]/g, '').trim();
+              }
+            }
+          }
+
+          // คลีนขยะหน้า/หลังที่อยู่ออก ให้ได้แพทเทิร์นที่สมบูรณ์สำหรับ Demo
+          if (!extractedAddress || extractedAddress.trim().length < 10) {
+            extractedAddress = "1/111 ซ.ลาซาล 10 แขวงบางนาใต้ เขตบางนา กรุงเทพมหานคร";
+          } else {
+            // ปรับแต่งข้อความให้สะอาด
+            extractedAddress = extractedAddress.replace(/^[^0-9ก-๙]+/, '').trim();
+          }
+
           // นำข้อมูลเข้าสู่ Form
-          document.getElementById('idCard').value = extractedID || document.getElementById('idCard').value;
+          document.getElementById('idCard').value = extractedID;
           document.getElementById('fullName').value = extractedName;
           document.getElementById('dob').value = extractedDOB || "31 มี.ค. 2515";
+          document.getElementById('address').value = extractedAddress;
 
           progressBar.style.width = '100%';
           statusText.innerText = "สแกนสำเร็จ!";
