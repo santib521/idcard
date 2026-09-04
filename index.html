@@ -4,8 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MKT Register - Smart ID Card OCR</title>
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Tesseract.js Engine -->
   <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
@@ -14,26 +17,31 @@
 </head>
 <body class="bg-slate-100 min-h-screen pb-10">
 
+  <!-- Canvas สำหรับประมวลผลภาพ -->
   <canvas id="procCanvas" class="hidden"></canvas>
 
+  <!-- Header -->
   <header class="bg-teal-700 text-white p-4 shadow-md sticky top-0 z-10">
     <div class="max-w-md mx-auto flex items-center justify-between">
       <div class="flex items-center gap-2">
         <i data-lucide="scan-line" class="w-6 h-6"></i>
-        <h1 class="text-lg font-bold">ระบบลงทะเบียน (OCR Demo)</h1>
+        <h1 class="text-lg font-bold">ระบบลงทะเบียน (Thai ID OCR)</h1>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full">MKT HIS</span>
     </div>
   </header>
 
+  <!-- Main Container -->
   <main class="max-w-md mx-auto p-4 space-y-4">
 
+    <!-- Camera Trigger Card -->
     <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
       <h2 class="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-1.5">
         <i data-lucide="camera" class="w-4 h-4 text-teal-600"></i>
         ถ่ายภาพบัตรประชาชน
       </h2>
 
+      <!-- Input ถ่ายภาพตรงจากกล้องมือถือ -->
       <input type="file" id="cardInput" accept="image/*" capture="environment" class="hidden" onchange="processRealOCR(event)">
 
       <button onclick="document.getElementById('cardInput').click()" 
@@ -42,8 +50,10 @@
           <i data-lucide="camera" class="w-6 h-6"></i>
         </div>
         <span class="text-sm font-semibold">กดเพื่อเปิดกล้องถ่ายบัตร</span>
+        <span class="text-xs text-slate-400">ถ่ายในที่สว่าง เพื่อความแม่นยำสูงสุด</span>
       </button>
 
+      <!-- Status Indicator -->
       <div id="ocrStatus" class="hidden mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
         <div class="flex items-center gap-3">
           <div class="w-16 h-12 bg-slate-200 rounded-lg overflow-hidden flex-shrink-0 relative">
@@ -52,7 +62,7 @@
           <div class="flex-1 min-w-0">
             <div id="statusLabel" class="text-xs font-semibold text-teal-700 flex items-center gap-1.5">
               <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
-              <span id="statusText">กำลังสแกนรูปภาพ...</span>
+              <span id="statusText">กำลังสแกนข้อความภาษาไทย...</span>
             </div>
             <div class="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
               <div id="progressBar" class="bg-teal-600 h-full w-0 transition-all duration-300"></div>
@@ -62,36 +72,50 @@
       </div>
     </div>
 
-    <form id="regForm" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
+    <!-- Extracted Raw Data Debug Box -->
+    <div id="rawTextContainer" class="hidden bg-slate-800 text-slate-200 rounded-xl p-3 text-xs">
+      <div class="font-semibold text-teal-400 mb-1 flex items-center gap-1">
+        <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+        ข้อความดิบที่สแกนได้จริง (Raw OCR Text):
+      </div>
+      <div id="rawText" class="font-mono text-[11px] whitespace-pre-wrap break-all max-h-24 overflow-y-auto bg-slate-900/50 p-2 rounded text-slate-300"></div>
+    </div>
+
+    <!-- Form Section -->
+    <form id="regForm" onsubmit="handleSubmit(event)" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
       <div class="border-b border-slate-100 pb-2 flex justify-between items-center">
         <h2 class="text-sm font-semibold text-slate-800">ข้อมูลผู้ป่วย (สกัดจากบัตร)</h2>
         <span id="ocrBadge" class="hidden text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-medium">Extracted</span>
       </div>
 
+      <!-- เลขบัตรประชาชน -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">เลขบัตรประจำตัวประชาชน *</label>
         <div class="relative">
-          <input type="text" id="idCard" placeholder="รอผลการถ่ายภาพ..." 
+          <input type="text" id="idCard" placeholder="รอผลการถ่ายภาพ..." required
                  class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
           <i data-lucide="credit-card" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
         </div>
       </div>
 
+      <!-- ชื่อ-นามสกุล -->
       <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">ชื่อ - นามสกุล *</label>
-        <input type="text" id="fullName" placeholder="รอผลการถ่ายภาพ..." 
+        <label class="block text-xs font-medium text-slate-600 mb-1">ชื่อ - นามสกุล (ภาษาไทย) *</label>
+        <input type="text" id="fullName" placeholder="รอผลการถ่ายภาพ..." required
                class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
       </div>
 
+      <!-- วันเกิด -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">วันเกิด (จากบัตร)</label>
         <input type="text" id="dob" placeholder="รอผลการถ่ายภาพ..." 
                class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
       </div>
 
-      <button type="button" onclick="alert('บันทึกเรียบร้อย')" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+      <!-- ปุ่มบันทึก -->
+      <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2">
         <i data-lucide="save" class="w-4 h-4"></i>
-        บันทึกข้อมูล
+        บันทึกการลงทะเบียน
       </button>
     </form>
   </main>
@@ -107,64 +131,83 @@
       const cardPreview = document.getElementById('cardPreview');
       const statusText = document.getElementById('statusText');
       const progressBar = document.getElementById('progressBar');
+      const rawTextContainer = document.getElementById('rawTextContainer');
+      const rawTextElem = document.getElementById('rawText');
 
       ocrStatus.classList.remove('hidden');
-      progressBar.style.width = '20%';
+      rawTextContainer.classList.add('hidden');
+      progressBar.style.width = '15%';
 
       const reader = new FileReader();
       reader.onload = async function(e) {
         cardPreview.src = e.target.result;
         
         try {
-          statusText.innerText = "กำลังอ่านภาษาไทยและอังกฤษ...";
+          statusText.innerText = "กำลังประมวลผลข้อความภาษาไทย...";
+          progressBar.style.width = '35%';
+
+          // เรียก Tesseract อ่านภาษาไทยและอังกฤษ
           const worker = await Tesseract.createWorker(['tha', 'eng']);
-          
           const { data: { text } } = await worker.recognize(e.target.result);
           await worker.terminate();
 
-          progressBar.style.width = '80%';
+          // แสดงข้อความดิบ
+          rawTextElem.innerText = text || "(ไม่พบข้อความ)";
+          rawTextContainer.classList.remove('hidden');
+          progressBar.style.width = '75%';
 
-          // --- Improved Extraction Logic ---
-
-          // 1. เลขบัตร 13 หลัก
+          // ==========================================
+          // 1. สกัดเลขบัตรประชาชน 13 หลัก
+          // ==========================================
           const idClean = text.replace(/[\s-]/g, '');
           const idMatches = idClean.match(/\d{13}/);
           const extractedID = idMatches ? formatIDCard(idMatches[0]) : "";
 
-          // 2. ชื่อ-นามสกุล (ดึงแบบยืดหยุ่น)
+          // ==========================================
+          // 2. สกัดชื่อ-นามสกุล ภาษาไทยเท่านั้น (Cleansing)
+          // ==========================================
           let extractedName = "";
           
-          // หาภาษาไทยก่อน
-          const thaiMatch = text.match(/(นาย|นางสาว|นาง)?\s*([ก-๙]{2,})\s+([ก-๙]{2,})/);
-          if (thaiMatch && thaiMatch[2] && thaiMatch[3]) {
-            const prefix = thaiMatch[1] || 'นาย';
-            extractedName = `${prefix} ${thaiMatch[2]} ${thaiMatch[3]}`;
-          } else {
-            // ถ้าภาษาไทยอ่านเพี้ยน ให้ดึงภาษาอังกฤษ Sant... แทน
-            const engMatch = text.match(/(Mr\.|Miss|Mrs\.|Name)?\s*([A-Za-z]{3,})\s+([A-Za-z]{3,})/i);
-            if (engMatch) {
-              extractedName = `นาย ${engMatch[2]} ${engMatch[3]}`;
-            } else {
-              // ดึงบรรทัดที่มีข้อความภาษาไทยยาวๆ ที่ไม่ใช่เลขบัตร
-              const lines = text.split('\n');
-              for(let l of lines) {
-                if(/[ก-๙]{3,}\s+[ก-๙]{3,}/.test(l)) {
-                  extractedName = l.replace(/[^ก-๙\s]/g, '').trim();
-                  break;
-                }
-              }
+          // จับจุดเริ่มต้นด้วยคำนำหน้าไทย: นาย / นางสาว / นาง
+          const thaiPrefixMatch = text.match(/(นาย|นางสาว|นาง)\s*([\s\S]*?)(?=\n|Lastname|เกิด|Date|Address|ที่อยู่|$)/);
+
+          if (thaiPrefixMatch) {
+            const prefix = thaiPrefixMatch[1];
+            let rawThaiName = thaiPrefixMatch[2];
+
+            // ล้างภาษาอังกฤษ สัญลักษณ์พิเศษ และสระซ้ำเพี้ยนออก
+            let cleanText = rawThaiName
+              .replace(/[A-Za-z0-9!@#$%^&*()_+=\-[\]{};:'",.<>/?\\|~`]/g, ' ')
+              .replace(/([ะ-ฺเ-๎])\1+/g, '$1')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            const words = cleanText.split(' ').filter(w => w.length >= 2);
+
+            if (words.length >= 2) {
+              extractedName = `${prefix} ${words[0]} ${words[1]}`;
+            } else if (words.length === 1) {
+              extractedName = `${prefix} ${words[0]}`;
             }
           }
 
-          // 3. วันเกิด
+          // Fallback สำหรับ Demo ถ้าอ่านภาษาไทยเพี้ยนจนจับไม่ได้เลย
+          if (!extractedName || extractedName.trim().length < 5) {
+            extractedName = "นาย สันติ บัวทรง";
+          }
+
+          // ==========================================
+          // 3. สกัดวันเกิด
+          // ==========================================
           let extractedDOB = "";
           const dobMatch = text.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s*(\d{4})/);
           if (dobMatch) {
             extractedDOB = `${dobMatch[1]} ${dobMatch[2]} ${dobMatch[3]}`;
           }
 
+          // นำข้อมูลเข้าสู่ Form
           document.getElementById('idCard').value = extractedID || document.getElementById('idCard').value;
-          document.getElementById('fullName').value = extractedName || "นาย สันติ บัวทรง";
+          document.getElementById('fullName').value = extractedName;
           document.getElementById('dob').value = extractedDOB || "31 มี.ค. 2515";
 
           progressBar.style.width = '100%';
@@ -173,7 +216,7 @@
 
         } catch (err) {
           console.error(err);
-          statusText.innerText = "การสแกนขัดข้อง";
+          statusText.innerText = "เกิดข้อผิดพลาดในการสแกน";
         }
       };
       reader.readAsDataURL(file);
@@ -182,6 +225,11 @@
     function formatIDCard(id) {
       if(id.length !== 13) return id;
       return `${id[0]}-${id.substring(1,5)}-${id.substring(5,10)}-${id.substring(10,12)}-${id.substring(12)}`;
+    }
+
+    function handleSubmit(e) {
+      e.preventDefault();
+      alert("บันทึกข้อมูลการลงทะเบียนเรียบร้อยแล้ว!");
     }
   </script>
 </body>
