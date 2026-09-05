@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V9.0 - Document Scan OCR</title>
+  <title>MKT Register V9.1 - Mobile Browse Color Safe OCR</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V9.0 (Document Scan OCR)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V9.1 (Mobile + Browse Color)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -748,9 +748,10 @@
         if (options.source !== 'browse' && (fullCanvas.width < 900 || fullCanvas.height < 500 || sharpness < 4.5)) {
           throw new Error('IMAGE_QUALITY');
         }
+        // รูปที่แสดงแก่ผู้ใช้ต้องมาจากภาพสีต้นฉบับเสมอ แยกจากภาพสำเนาที่ใช้ OCR
+        cropFaceFromCanvas(fullCanvas);
         const preparedCanvas = prepareCardCanvas(fullCanvas, options.source === 'browse');
         const ocrDataUrl = preparedCanvas.toDataURL('image/png');
-        cropFaceFromCanvas(preparedCanvas);
         progressBar.style.width = '45%';
 
         const worker = await getOcrWorker(m => {
@@ -828,13 +829,12 @@
         statusText.innerText = missing.length
           ? `อ่านได้บางส่วน กรุณาตรวจสอบ: ${missing.join(', ')}`
           : `อ่านข้อมูลครบแล้ว กรุณาตรวจสอบก่อนบันทึก (${confidence}%)`;
-        const essentialCount = [idDigits && isValidThaiID(idDigits), extractedName, extractedAddress].filter(Boolean).length;
         const badge = document.getElementById('ocrBadge');
         badge.classList.remove('hidden');
-        badge.className = essentialCount >= 2
-          ? 'inline-block mt-2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-medium'
-          : 'inline-block mt-2 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-medium';
-        badge.innerText = essentialCount >= 2 ? 'OCR สำเร็จ — โปรดตรวจสอบ' : 'ภาพไม่ชัด/ข้อมูลไม่พอ — กรุณาถ่ายใหม่';
+        badge.className = 'inline-block mt-2 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-medium';
+        badge.innerText = missing.length
+          ? 'OCR ได้บางส่วน — ต้องแก้ไขก่อนบันทึก'
+          : 'OCR ครบทุกช่อง — กรุณาตรวจสอบกับบัตร';
 
       } catch (err) {
         console.error(err);
@@ -878,6 +878,19 @@
 
     function handleSubmit(e) {
       e.preventDefault();
+      const source = document.getElementById('sourceLabel').innerText || '';
+      if (/OCR/.test(source)) {
+        const digits = document.getElementById('idCard').value.replace(/\D/g, '');
+        const required = [
+          document.getElementById('fullName').value.trim(),
+          document.getElementById('dob').value.trim(),
+          document.getElementById('address').value.trim()
+        ];
+        if (!isValidThaiID(digits) || required.some(value => !value)) {
+          alert('ข้อมูลจาก OCR ยังไม่ครบหรือเลขบัตรไม่ถูกต้อง กรุณาตรวจสอบและแก้ไขก่อนบันทึก');
+          return;
+        }
+      }
       alert("บันทึกข้อมูลการลงทะเบียนเรียบร้อยแล้ว!");
     }
   </script>
