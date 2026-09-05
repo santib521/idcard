@@ -3,12 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register - Zone OCR Demo</title>
-  <!-- Tailwind CSS -->
+  <title>MKT Register V5.1 - Fixed OCR & Smart Card Adapter</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- Tesseract.js Engine -->
   <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
@@ -17,42 +14,60 @@
 </head>
 <body class="bg-slate-100 min-h-screen pb-10">
 
-  <!-- Canvases สำหรับตัดเฉพาะโซนภาพ -->
   <canvas id="cropCanvas" class="hidden"></canvas>
   <canvas id="faceCanvas" class="hidden"></canvas>
-  <canvas id="addrZoneCanvas" class="hidden"></canvas>
 
-  <!-- Header -->
   <header class="bg-teal-700 text-white p-4 shadow-md sticky top-0 z-10">
     <div class="max-w-md mx-auto flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <i data-lucide="scan-line" class="w-6 h-6"></i>
-        <h1 class="text-lg font-bold">ระบบลงทะเบียน (Thai ID OCR)</h1>
+        <i data-lucide="shield-check" class="w-6 h-6"></i>
+        <div>
+          <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V5.1</p>
+        </div>
       </div>
-      <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full">MKT HIS</span>
+      <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
     </div>
   </header>
 
-  <!-- Main Container -->
   <main class="max-w-md mx-auto p-4 space-y-4">
 
-    <!-- Input Mode Switcher Card -->
     <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+      <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">เลือกวิธีนำเข้าข้อมูลบัตร</label>
       
-      <!-- Mode Tabs Button -->
-      <div class="flex bg-slate-100 p-1 rounded-xl mb-4">
-        <button id="tabCamera" onclick="switchMode('camera')" class="flex-1 py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex items-center justify-center gap-1.5">
-          <i data-lucide="camera" class="w-4 h-4"></i>
-          ถ่ายภาพจากกล้อง
+      <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl mb-4">
+        <button id="tabReader" onclick="switchMode('reader')" class="py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1">
+          <i data-lucide="cpu" class="w-4 h-4"></i>
+          <span>Smart Card</span>
         </button>
-        <button id="tabBrowse" onclick="switchMode('browse')" class="flex-1 py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex items-center justify-center gap-1.5">
+        <button id="tabCamera" onclick="switchMode('camera')" class="py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex flex-col items-center gap-1">
+          <i data-lucide="camera" class="w-4 h-4"></i>
+          <span>ถ่ายรูปกล้อง</span>
+        </button>
+        <button id="tabBrowse" onclick="switchMode('browse')" class="py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex flex-col items-center gap-1">
           <i data-lucide="upload" class="w-4 h-4"></i>
-          Browse อัปโหลดไฟล์
+          <span>Browse ไฟล์</span>
         </button>
       </div>
 
-      <!-- Mode 1: Camera Stream View -->
-      <div id="modeCamera" class="space-y-3">
+      <!-- Mode 1: Smart Card Reader -->
+      <div id="modeReader" class="space-y-3">
+        <div class="bg-teal-50/60 border-2 border-dashed border-teal-400/60 rounded-xl p-5 text-center">
+          <div class="w-12 h-12 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center mx-auto mb-2">
+            <i data-lucide="usb" class="w-6 h-6 animate-pulse"></i>
+          </div>
+          <h3 class="text-sm font-semibold text-slate-800">เครื่องอ่านบัตร ACS ACR39U-NF</h3>
+          <p class="text-xs text-slate-500 mt-1 mb-4">เสียบบัตรประชาชนเข้ากับเครื่องอ่านเพื่อดึงข้อมูลชิป 100%</p>
+
+          <button onclick="readSmartCardHardware()" class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold py-3 px-4 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-2">
+            <i data-lucide="credit-card" class="w-4 h-4"></i>
+            <span>อ่านข้อมูลจากบัตร Smart Card</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mode 2: Camera View -->
+      <div id="modeCamera" class="hidden space-y-3">
         <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
           
@@ -62,7 +77,7 @@
               <i data-lucide="video" class="w-5 h-5"></i>
               <span>เปิดกล้องถ่ายภาพ</span>
             </button>
-            <p class="text-xs text-slate-400 mt-2">กดเพื่ออนุญาตให้ใช้งานกล้อง</p>
+            <p class="text-xs text-slate-400 mt-2">สแกน OCR ผ่านกล้องถ่ายภาพ</p>
           </div>
 
           <button id="snapBtn" onclick="takeSnapshot()" class="hidden absolute bottom-3 bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 active:scale-95 transition-all">
@@ -72,7 +87,7 @@
         </div>
       </div>
 
-      <!-- Mode 2: Browse File View -->
+      <!-- Mode 3: Browse View -->
       <div id="modeBrowse" class="hidden space-y-3">
         <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
         <button onclick="document.getElementById('fileInput').click()" 
@@ -88,13 +103,14 @@
       <!-- Status Indicator -->
       <div id="ocrStatus" class="hidden mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
         <div class="flex items-center gap-3">
-          <div class="w-16 h-12 bg-slate-200 rounded-lg overflow-hidden flex-shrink-0 relative">
-            <img id="cardPreview" class="w-full h-full object-cover" src="" alt="Card Preview">
+          <div class="w-16 h-12 bg-slate-200 rounded-lg overflow-hidden flex-shrink-0 relative flex items-center justify-center">
+            <img id="cardPreview" class="w-full h-full object-cover hidden" src="" alt="Card Preview">
+            <i id="cardIcon" data-lucide="credit-card" class="w-6 h-6 text-slate-400"></i>
           </div>
           <div class="flex-1 min-w-0">
             <div id="statusLabel" class="text-xs font-semibold text-teal-700 flex items-center gap-1.5">
-              <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
-              <span id="statusText">กำลังสแกนและสกัดข้อมูลที่อยู่...</span>
+              <i id="statusSpinner" data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+              <span id="statusText">กำลังประมวลผลข้อมูล...</span>
             </div>
             <div class="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
               <div id="progressBar" class="bg-teal-600 h-full w-0 transition-all duration-300"></div>
@@ -107,7 +123,6 @@
     <!-- Form Section -->
     <form id="regForm" onsubmit="handleSubmit(event)" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
       
-      <!-- Face Photo & Profile Status -->
       <div class="border-b border-slate-100 pb-4 flex items-center gap-4">
         <div class="w-20 h-24 bg-slate-100 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center overflow-hidden flex-shrink-0 relative">
           <img id="facePreview" class="hidden w-full h-full object-cover" src="" alt="Face Crop">
@@ -118,47 +133,42 @@
         </div>
 
         <div>
-          <h2 class="text-sm font-semibold text-slate-800">ข้อมูลผู้ป่วย (Extracted Profile)</h2>
-          <p class="text-xs text-slate-400 mt-0.5">ดึงรูปถ่ายหน้าบัตร และที่อยู่ตามบัตรประชาชน</p>
-          <span id="ocrBadge" class="hidden inline-block mt-2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-medium">Extracted Success</span>
+          <h2 class="text-sm font-semibold text-slate-800">ข้อมูลผู้ป่วย (สกัดจากบัตร)</h2>
+          <p id="sourceLabel" class="text-xs text-slate-400 mt-0.5">รอรับข้อมูลนำเข้า...</p>
+          <span id="ocrBadge" class="hidden inline-block mt-2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-medium">Extracted</span>
         </div>
       </div>
 
-      <!-- เลขบัตรประชาชน -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">เลขบัตรประจำตัวประชาชน *</label>
         <div class="relative">
-          <input type="text" id="idCard" placeholder="รอผลการนำเข้าภาพ..." required
+          <input type="text" id="idCard" placeholder="รอผลการนำเข้าข้อมูล..." required
                  class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
           <i data-lucide="credit-card" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
         </div>
       </div>
 
-      <!-- ชื่อ-นามสกุล -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">ชื่อ - นามสกุล (ภาษาไทย) *</label>
-        <input type="text" id="fullName" placeholder="รอผลการนำเข้าภาพ..." required
+        <input type="text" id="fullName" placeholder="รอผลการนำเข้าข้อมูล..." required
                class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
       </div>
 
-      <!-- วันเกิด -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">วันเกิด (จากบัตร)</label>
-        <input type="text" id="dob" placeholder="รอผลการนำเข้าภาพ..." 
+        <input type="text" id="dob" placeholder="รอผลการนำเข้าข้อมูล..." 
                class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
       </div>
 
-      <!-- ที่อยู่ตามบัตรประชาชน -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">ที่อยู่ตามบัตรประชาชน</label>
         <div class="relative">
-          <textarea id="address" rows="3" placeholder="รอผลการนำเข้าภาพ..." 
+          <textarea id="address" rows="3" placeholder="รอผลการนำเข้าข้อมูล..." 
                     class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500"></textarea>
           <i data-lucide="map-pin" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
         </div>
       </div>
 
-      <!-- ปุ่มบันทึก -->
       <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2">
         <i data-lucide="save" class="w-4 h-4"></i>
         บันทึกการลงทะเบียน
@@ -170,26 +180,110 @@
     lucide.createIcons();
     let videoStream = null;
 
+    function clearFormInputs() {
+      document.getElementById('idCard').value = "";
+      document.getElementById('fullName').value = "";
+      document.getElementById('dob').value = "";
+      document.getElementById('address').value = "";
+      document.getElementById('facePreview').classList.add('hidden');
+      document.getElementById('facePlaceholder').classList.remove('hidden');
+      document.getElementById('ocrBadge').classList.add('hidden');
+    }
+
     function switchMode(mode) {
+      const tabReader = document.getElementById('tabReader');
       const tabCamera = document.getElementById('tabCamera');
       const tabBrowse = document.getElementById('tabBrowse');
+      const modeReader = document.getElementById('modeReader');
       const modeCamera = document.getElementById('modeCamera');
       const modeBrowse = document.getElementById('modeBrowse');
 
-      if (mode === 'camera') {
-        tabCamera.className = "flex-1 py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex items-center justify-center gap-1.5";
-        tabBrowse.className = "flex-1 py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex items-center justify-center gap-1.5";
+      [tabReader, tabCamera, tabBrowse].forEach(t => t.className = "py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex flex-col items-center gap-1");
+      [modeReader, modeCamera, modeBrowse].forEach(m => m.classList.add('hidden'));
+
+      if (mode === 'reader') {
+        tabReader.className = "py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1";
+        modeReader.classList.remove('hidden');
+        stopCamera();
+      } else if (mode === 'camera') {
+        tabCamera.className = "py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1";
         modeCamera.classList.remove('hidden');
-        modeBrowse.classList.add('hidden');
       } else {
-        tabBrowse.className = "flex-1 py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex items-center justify-center gap-1.5";
-        tabCamera.className = "flex-1 py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex items-center justify-center gap-1.5";
+        tabBrowse.className = "py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1";
         modeBrowse.classList.remove('hidden');
-        modeCamera.classList.add('hidden');
         stopCamera();
       }
     }
 
+    // 1. SMART CARD READER ADAPTER
+    async function readSmartCardHardware() {
+      const ocrStatus = document.getElementById('ocrStatus');
+      const statusText = document.getElementById('statusText');
+      const progressBar = document.getElementById('progressBar');
+      const statusSpinner = document.getElementById('statusSpinner');
+
+      clearFormInputs();
+      ocrStatus.classList.remove('hidden');
+      statusSpinner.classList.remove('hidden');
+      progressBar.style.width = '30%';
+      statusText.innerText = "กำลังเชื่อมต่อเครื่องอ่าน ACS ACR39U-NF...";
+
+      if (window.webcard) {
+        try {
+          const readers = await window.webcard.readers();
+          if (readers.length > 0) {
+            const card = await readers[0].connect();
+            const data = await card.readThaiID();
+            fillFormData(data.cid, data.fullName, data.dob, data.address, data.photoBase64, "ชิปบัตรประชาชน (Smart Card APDU)");
+            return;
+          }
+        } catch (e) { console.log(e); }
+      }
+
+      const connected = await connectWebSocketAgent();
+      if (!connected) {
+        progressBar.style.width = '100%';
+        statusSpinner.classList.add('hidden');
+        statusText.innerText = "ไม่พบการเชื่อมต่อ Smart Card (โปรดใช้ WebCard Extension หรือ Agent Service)";
+      }
+    }
+
+    function connectWebSocketAgent() {
+      return new Promise((resolve) => {
+        const progressBar = document.getElementById('progressBar');
+        const statusText = document.getElementById('statusText');
+        const statusSpinner = document.getElementById('statusSpinner');
+
+        try {
+          const ws = new WebSocket('ws://localhost:8181/smartcard');
+          const timer = setTimeout(() => { ws.close(); resolve(false); }, 1200);
+
+          ws.onopen = function() {
+            clearTimeout(timer);
+            progressBar.style.width = '70%';
+            statusText.innerText = "กำลังส่งคำสั่ง APDU อ่านข้อมูลบัตร...";
+            ws.send(JSON.stringify({ command: "READ_CARD" }));
+          };
+
+          ws.onmessage = function(ev) {
+            const res = JSON.parse(ev.data);
+            if (res.status === "success") {
+              fillFormData(res.idCard, res.fullName, res.dob, res.address, res.photoBase64, "ชิปบัตรประชาชน (Smart Card APDU)");
+            } else {
+              progressBar.style.width = '100%';
+              statusSpinner.classList.add('hidden');
+              statusText.innerText = "โปรดเสียบบัตรประชาชนเข้ากับเครื่องอ่าน";
+            }
+            ws.close();
+            resolve(true);
+          };
+
+          ws.onerror = function() { clearTimeout(timer); resolve(false); };
+        } catch (err) { resolve(false); }
+      });
+    }
+
+    // 2. CAMERA OCR
     async function startCamera() {
       try {
         videoStream = await navigator.mediaDevices.getUserMedia({ 
@@ -200,9 +294,7 @@
         video.classList.remove('hidden');
         document.getElementById('startState').classList.add('hidden');
         document.getElementById('snapBtn').classList.remove('hidden');
-      } catch (err) {
-        alert("ไม่สามารถเปิดกล้องได้ โปรดเปิดผ่าน HTTPS หรืออนุญาตสิทธิ์กล้อง");
-      }
+      } catch (err) { alert("ไม่สามารถเปิดกล้องได้"); }
     }
 
     function stopCamera() {
@@ -219,17 +311,15 @@
       const video = document.getElementById('webcam');
       const canvas = document.getElementById('cropCanvas');
       const ctx = canvas.getContext('2d');
-
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
-
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL('image/jpeg');
-
       stopCamera();
       processCardImage(canvas, dataUrl);
     }
 
+    // 3. BROWSE OCR
     function handleFileSelect(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -243,7 +333,6 @@
           canvas.width = img.width;
           canvas.height = img.height;
           ctx.drawImage(img, 0, 0);
-
           processCardImage(canvas, event.target.result);
         };
         img.src = event.target.result;
@@ -251,134 +340,137 @@
       reader.readAsDataURL(file);
     }
 
+    function cropFaceFromCanvas(fullCanvas) {
+      const w = fullCanvas.width;
+      const h = fullCanvas.height;
+      const faceCanvas = document.getElementById('faceCanvas');
+      const faceCtx = faceCanvas.getContext('2d');
+      const faceW = Math.floor(w * 0.28);
+      const faceH = Math.floor(h * 0.48);
+      const faceX = Math.floor(w * 0.70);
+      const faceY = Math.floor(h * 0.48);
+
+      faceCanvas.width = faceW;
+      faceCanvas.height = faceH;
+      faceCtx.drawImage(fullCanvas, faceX, faceY, faceW, faceH, 0, 0, faceW, faceH);
+
+      document.getElementById('facePreview').src = faceCanvas.toDataURL('image/jpeg');
+      document.getElementById('facePreview').classList.remove('hidden');
+      document.getElementById('facePlaceholder').classList.add('hidden');
+    }
+
+    // IMPROVED PARSER ENGINE (FIX NAME & ADDRESS)
     async function processCardImage(fullCanvas, dataUrl) {
       const ocrStatus = document.getElementById('ocrStatus');
       const cardPreview = document.getElementById('cardPreview');
+      const cardIcon = document.getElementById('cardIcon');
       const statusText = document.getElementById('statusText');
       const progressBar = document.getElementById('progressBar');
+      const statusSpinner = document.getElementById('statusSpinner');
+
+      clearFormInputs();
 
       ocrStatus.classList.remove('hidden');
+      cardIcon.classList.add('hidden');
       cardPreview.src = dataUrl;
-      progressBar.style.width = '20%';
+      cardPreview.classList.remove('hidden');
+      statusSpinner.classList.remove('hidden');
+      progressBar.style.width = '30%';
 
       try {
-        const w = fullCanvas.width;
-        const h = fullCanvas.height;
-
-        // Crop Face Photo
-        const faceCanvas = document.getElementById('faceCanvas');
-        const faceCtx = faceCanvas.getContext('2d');
-        const faceW = Math.floor(w * 0.28);
-        const faceH = Math.floor(h * 0.48);
-        const faceX = Math.floor(w * 0.70);
-        const faceY = Math.floor(h * 0.48);
-
-        faceCanvas.width = faceW;
-        faceCanvas.height = faceH;
-        faceCtx.drawImage(fullCanvas, faceX, faceY, faceW, faceH, 0, 0, faceW, faceH);
-
-        document.getElementById('facePreview').src = faceCanvas.toDataURL('image/jpeg');
-        document.getElementById('facePreview').classList.remove('hidden');
-        document.getElementById('facePlaceholder').classList.add('hidden');
-
-        // Crop Address Zone
-        const addrCanvas = document.getElementById('addrZoneCanvas');
-        const addrCtx = addrCanvas.getContext('2d');
-        const addrX = Math.floor(w * 0.10);
-        const addrY = Math.floor(h * 0.65);
-        const addrW = Math.floor(w * 0.58);
-        const addrH = Math.floor(h * 0.15); 
-
-        addrCanvas.width = addrW;
-        addrCanvas.height = addrH;
-        addrCtx.drawImage(fullCanvas, addrX, addrY, addrW, addrH, 0, 0, addrW, addrH);
-        const addrZoneDataUrl = addrCanvas.toDataURL('image/jpeg');
-
-        progressBar.style.width = '45%';
-        statusText.innerText = "กำลังสแกนข้อความบัตร...";
+        cropFaceFromCanvas(fullCanvas);
+        progressBar.style.width = '50%';
+        statusText.innerText = "กำลังสแกนข้อความจริงจากภาพ...";
 
         const worker = await Tesseract.createWorker(['tha', 'eng']);
-        const { data: { text: fullText } } = await worker.recognize(dataUrl);
-        const { data: { text: addrText } } = await worker.recognize(addrZoneDataUrl);
+        const { data: { text } } = await worker.recognize(dataUrl);
         await worker.terminate();
 
-        progressBar.style.width = '80%';
+        progressBar.style.width = '85%';
 
-        // 1. เลขบัตร
-        const idClean = fullText.replace(/[\s-]/g, '');
+        // 1. ID Card Parser
+        const idClean = text.replace(/[\s-]/g, '');
         const idMatches = idClean.match(/\d{13}/);
-        const extractedID = idMatches ? formatIDCard(idMatches[0]) : "3-1101-00561-78-4";
+        const extractedID = idMatches ? formatIDCard(idMatches[0]) : "";
 
-        // 2. ชื่อ-สกุล
+        // 2. Name Parser (ดักจับคำนำหน้าไทยทุกรูปแบบ)
         let extractedName = "";
-        const thaiPrefixMatch = fullText.match(/(นาย|นางสาว|นาง)\s*([\s\S]*?)(?=\n|Lastname|เกิด|Date|Address|ที่อยู่|$)/);
-        if (thaiPrefixMatch) {
-          const prefix = thaiPrefixMatch[1];
-          let cleanText = thaiPrefixMatch[2]
-            .replace(/[A-Za-z0-9!@#$%^&*()_+=\-[\]{};:'",.<>/?\\|~`]/g, ' ')
-            .replace(/([ะ-ฺเ-๎])\1+/g, '$1')
-            .replace(/\s+/g, ' ').trim();
-          const words = cleanText.split(' ').filter(w => w.length >= 2);
-          if (words.length >= 2) extractedName = `${prefix} ${words[0]} ${words[1]}`;
-        }
-        if (!extractedName || extractedName.length < 5) extractedName = "นาย สันติ บัวทรง";
-
-        // 3. วันเกิด
-        let extractedDOB = "";
-        const dobMatch = fullText.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s*(\d{4})/);
-        if (dobMatch) extractedDOB = `${dobMatch[1]} ${dobMatch[2]} ${dobMatch[3]}`;
-
-        // 4. สกัดและแก้ไขคำเพี้ยนที่อยู่อัตโนมัติ (Thai Address Dictionary Cleaner)
-        let cleanAddress = addrText
-          .replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™-]/g, ' ')
-          .replace(/^ที่อยู่\s*/, '')
-          .replace(/^[^0-9ก-๙]+/, '')
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        // --- Dictionary แก้ไขคำเพี้ยนยอดฮิต ---
-        cleanAddress = cleanAddress
-          .replace(/บางนา\s*เต้/g, 'บางนาใต้')
-          .replace(/บางนา\s*เตั/g, 'บางนาใต้')
-          .replace(/บางนา\s*ใต้/g, 'บางนาใต้')
-          .replace(/บางนา\s*เหนือ/g, 'บางนาเหนือ')
-          .replace(/ลา\s*ซาล/g, 'ลาซาล')
-          .replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร');
-
-        // Strict Truncation: สั่งตัดจบข้อความทันทีที่เจอคำว่า กรุงเทพมหานคร
-        if (cleanAddress.includes("กรุงเทพมหานคร")) {
-          cleanAddress = cleanAddress.substring(0, cleanAddress.indexOf("กรุงเทพมหานคร") + 13);
-        } else if (cleanAddress.includes("กรุงเทพ")) {
-          cleanAddress = cleanAddress.substring(0, cleanAddress.indexOf("กรุงเทพ")) + "กรุงเทพมหานคร";
+        const nameMatch = text.match(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)\s*([ก-๙]+)\s+([ก-๙]+)/);
+        if (nameMatch) {
+          extractedName = `${nameMatch[1]} ${nameMatch[2]} ${nameMatch[3]}`;
         } else {
-          const districtMatch = cleanAddress.match(/(เขต|อำเภอ|อ\.)\s*[ก-๙]+/);
-          if (districtMatch) {
-            const endIdx = cleanAddress.indexOf(districtMatch[0]) + districtMatch[0].length;
-            cleanAddress = cleanAddress.substring(0, endIdx) + " กรุงเทพมหานคร";
-          } else {
-            cleanAddress += " เขตบางนา กรุงเทพมหานคร";
+          const lines = text.split('\n');
+          for (let l of lines) {
+            let cleanL = l.replace(/[A-Za-z0-9!@#$%^&*()_+=\-[\]{};:'",.<>/?\\|~`]/g, ' ').trim();
+            if (/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)/.test(cleanL)) {
+              extractedName = cleanL.replace(/\s+/g, ' ');
+              break;
+            }
           }
         }
 
-        // คลีนซ้ำรอบสุดท้าย
-        cleanAddress = cleanAddress
-          .replace(/\b\d{1,2}\s+(ม\.ย\.|มี\.ค\.|ก\.พ\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*\d*\b/g, '')
-          .replace(/\s+/g, ' ')
-          .trim();
+        // 3. DOB Parser
+        let extractedDOB = "";
+        const dobMatch = text.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s*(\d{4})/);
+        if (dobMatch) {
+          extractedDOB = `${dobMatch[1]} ${dobMatch[2]} ${dobMatch[3]}`;
+        }
 
-        document.getElementById('idCard').value = extractedID;
-        document.getElementById('fullName').value = extractedName;
-        document.getElementById('dob').value = extractedDOB || "31 มี.ค. 2515";
-        document.getElementById('address').value = cleanAddress;
+        // 4. Address Parser (สกัดเฉพาะโครงสร้างที่อยู่จริง)
+        let extractedAddress = "";
+        const lines = text.split('\n');
+        let addrParts = [];
 
-        progressBar.style.width = '100%';
-        statusText.innerText = "นำเข้าข้อมูลและสกัดรูปถ่ายสำเร็จ!";
-        document.getElementById('ocrBadge').classList.remove('hidden');
+        for (let l of lines) {
+          let cleanL = l.replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™-]/g, ' ').replace(/\s+/g, ' ').trim();
+          if (cleanL.includes("บัตรประจำตัวประชาชน") || cleanL.includes("เกิดวันที่") || cleanL.includes("ศาสนา") || cleanL.includes("วันออกบัตร") || cleanL.includes("หมดอายุ") || /\d{13}/.test(cleanL.replace(/\s/g, ''))) continue;
+
+          if (cleanL.includes("ที่อยู่") || /(\d+\/\d+|\d+)/.test(cleanL) || cleanL.includes("ซอย") || cleanL.includes("ถนน") || cleanL.includes("แขวง") || cleanL.includes("เขต") || cleanL.includes("ตำบล") || cleanL.includes("อำเภอ") || cleanL.includes("จังหวัด") || cleanL.includes("กรุงเทพ")) {
+            addrParts.push(cleanL.replace(/^ที่อยู่\s*/, ''));
+          }
+        }
+
+        if (addrParts.length > 0) {
+          extractedAddress = addrParts.join(' ')
+            .replace(/บางนา\s*เต้|บางนา\s*เตั/g, 'บางนาใต้')
+            .replace(/ลา\s*ซาล/g, 'ลาซาล')
+            .replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร')
+            .replace(/^[^0-9ก-๙]+/, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        }
+
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, "สแกนภาพถ่ายจริง (Dynamic OCR)");
 
       } catch (err) {
         console.error(err);
-        statusText.innerText = "เกิดข้อผิดพลาดในการประมวลผล";
+        statusText.innerText = "เกิดข้อผิดพลาดในการสแกนภาพ";
+        statusSpinner.classList.add('hidden');
       }
+    }
+
+    function fillFormData(id, name, dob, address, photoBase64, sourceText) {
+      const progressBar = document.getElementById('progressBar');
+      const statusText = document.getElementById('statusText');
+      const statusSpinner = document.getElementById('statusSpinner');
+
+      document.getElementById('idCard').value = id || "";
+      document.getElementById('fullName').value = name || "";
+      document.getElementById('dob').value = dob || "";
+      document.getElementById('address').value = address || "";
+
+      if (photoBase64) {
+        document.getElementById('facePreview').src = photoBase64.startsWith('data:') ? photoBase64 : "data:image/jpeg;base64," + photoBase64;
+        document.getElementById('facePreview').classList.remove('hidden');
+        document.getElementById('facePlaceholder').classList.add('hidden');
+      }
+
+      progressBar.style.width = '100%';
+      statusSpinner.classList.add('hidden');
+      statusText.innerText = "สแกนและสกัดข้อมูลสำเร็จ!";
+      document.getElementById('sourceLabel').innerText = "แหล่งข้อมูล: " + sourceText;
+      document.getElementById('ocrBadge').classList.remove('hidden');
+      document.getElementById('ocrBadge').innerText = "Extracted Success";
     }
 
     function formatIDCard(id) {
@@ -388,7 +480,7 @@
 
     function handleSubmit(e) {
       e.preventDefault();
-      alert("บันทึกข้อมูลและรูปถ่ายผู้ป่วยเรียบร้อยแล้ว!");
+      alert("บันทึกข้อมูลการลงทะเบียนเรียบร้อยแล้ว!");
     }
   </script>
 </body>
