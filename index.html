@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V8.2 - Background Agent & Enhanced OCR</title>
+  <title>MKT Register V8.3 - One-Tap Agent Recovery & Enhanced OCR</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V8.2 (Background Agent + Enhanced OCR)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V8.3 (One-Tap Agent + Enhanced OCR)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -197,6 +197,44 @@
   <script>
     lucide.createIcons();
     let videoStream = null;
+    let agentRetryInProgress = false;
+
+    async function waitForLocalAgent(maxAttempts = 12) {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const response = await fetch('http://127.0.0.1:8181/health', {
+            method: 'GET', cache: 'no-store'
+          });
+          if (response.ok) return true;
+        } catch (_) {}
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      return false;
+    }
+
+    async function resumePendingCardRead() {
+      if (agentRetryInProgress || sessionStorage.getItem('mktPendingCardRead') !== '1') return;
+      if (document.visibilityState && document.visibilityState !== 'visible') return;
+      agentRetryInProgress = true;
+      const status = document.getElementById('ocrStatus');
+      const statusText = document.getElementById('statusText');
+      status.classList.remove('hidden');
+      statusText.innerText = 'กลับจาก Agent แล้ว กำลังรอเชื่อมต่อและอ่านบัตรอัตโนมัติ...';
+
+      const ready = await waitForLocalAgent();
+      sessionStorage.removeItem('mktPendingCardRead');
+      agentRetryInProgress = false;
+      if (ready) {
+        await readSmartCardHardware({ skipAgentLaunch: true });
+      } else {
+        document.getElementById('statusSpinner').classList.add('hidden');
+        statusText.innerText = 'Agent ยังไม่พร้อม กรุณาตรวจสอบ Notification หรือเปิด MKT SmartCard Agent หนึ่งครั้ง';
+      }
+    }
+
+    document.addEventListener('visibilitychange', resumePendingCardRead);
+    window.addEventListener('focus', resumePendingCardRead);
+    window.addEventListener('pageshow', resumePendingCardRead);
 
     // ฟังก์ชันให้ Android Native App เรียกใช้ผ่าน WebView Interface Direct
     window.onAndroidSmartCardRead = function(jsonData) {
@@ -240,7 +278,7 @@
     }
 
     // SMART CARD CONNECTOR (ANDROID DIRECT & HTTP AGENT DEMO)
-    async function readSmartCardHardware() {
+    async function readSmartCardHardware(options = {}) {
       const ocrStatus = document.getElementById('ocrStatus');
       const statusText = document.getElementById('statusText');
       const progressBar = document.getElementById('progressBar');
@@ -285,11 +323,12 @@
         console.error("Local agent error", e);
         progressBar.style.width = '100%';
         statusSpinner.classList.add('hidden');
-        if (/Android/i.test(navigator.userAgent) && e.message === 'Failed to fetch') {
+        if (!options.skipAgentLaunch && /Android/i.test(navigator.userAgent) && e.message === 'Failed to fetch') {
           const lastStart = Number(sessionStorage.getItem('mktAgentStart') || 0);
           if (Date.now() - lastStart > 5000) {
             sessionStorage.setItem('mktAgentStart', String(Date.now()));
-            statusText.innerText = "กำลังเปิด MKT SmartCard Agent แล้วจะกลับมาหน้าเว็บ กรุณากดอ่านบัตรอีกครั้ง";
+            sessionStorage.setItem('mktPendingCardRead', '1');
+            statusText.innerText = "กำลังเปิด MKT SmartCard Agent แล้วจะกลับมาอ่านบัตรต่ออัตโนมัติ";
             window.location.href = 'mkt-smartcard://start';
             return;
           }
