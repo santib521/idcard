@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V5.2 - Zoned OCR & Smart Card</title>
+  <title>MKT Register V6.0 - Zoned OCR & Dual WSS Bridge</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -17,10 +17,11 @@
 </head>
 <body class="bg-slate-100 min-h-screen pb-10">
 
-  <!-- Canvases สำหรับสกัดพื้นที่ต่าง ๆ ของบัตร -->
+  <!-- Canvases สำหรับ Crop แต่ละส่วนของบัตร -->
   <canvas id="cropCanvas" class="hidden"></canvas>
   <canvas id="faceCanvas" class="hidden"></canvas>
-  <canvas id="zoneCanvas" class="hidden"></canvas>
+  <canvas id="nameCanvas" class="hidden"></canvas>
+  <canvas id="addrCanvas" class="hidden"></canvas>
 
   <!-- Header -->
   <header class="bg-teal-700 text-white p-4 shadow-md sticky top-0 z-10">
@@ -29,7 +30,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V5.2 (Zone Processed)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V6.0 (Zoned Precision)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -75,7 +76,7 @@
         </div>
       </div>
 
-      <!-- Mode 2: Camera View -->
+      <!-- Mode 2: Camera Stream View -->
       <div id="modeCamera" class="hidden space-y-3">
         <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
@@ -96,7 +97,7 @@
         </div>
       </div>
 
-      <!-- Mode 3: Browse View -->
+      <!-- Mode 3: Browse File View -->
       <div id="modeBrowse" class="hidden space-y-3">
         <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
         <button onclick="document.getElementById('fileInput').click()" 
@@ -132,7 +133,7 @@
     <!-- Form Section -->
     <form id="regForm" onsubmit="handleSubmit(event)" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
       
-      <!-- Profile Header -->
+      <!-- Profile Header & Face Photo Crop Box -->
       <div class="border-b border-slate-100 pb-4 flex items-center gap-4">
         <div class="w-20 h-24 bg-slate-100 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center overflow-hidden flex-shrink-0 relative">
           <img id="facePreview" class="hidden w-full h-full object-cover" src="" alt="Face Crop">
@@ -183,6 +184,7 @@
         </div>
       </div>
 
+      <!-- ปุ่มบันทึก -->
       <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2">
         <i data-lucide="save" class="w-4 h-4"></i>
         บันทึกการลงทะเบียน
@@ -229,7 +231,7 @@
       }
     }
 
-    // 1. SMART CARD CONNECTOR
+    // 1. SMART CARD READER DUAL WSS / HTTP CONNECTOR
     async function readSmartCardHardware() {
       const ocrStatus = document.getElementById('ocrStatus');
       const statusText = document.getElementById('statusText');
@@ -242,6 +244,7 @@
       progressBar.style.width = '30%';
       statusText.innerText = "กำลังเชื่อมต่อเครื่องอ่าน ACS ACR39U-NF...";
 
+      // ตรวจสอบ WebCard Extension
       if (window.webcard) {
         try {
           const readers = await window.webcard.readers();
@@ -254,28 +257,36 @@
         } catch (e) { console.log(e); }
       }
 
-      const connected = await connectWebSocketAgent();
+      // ตรวจสอบ WebSocket Agent ทั้งแบบ Secure WSS และ WS
+      const endpoints = ['wss://localhost:8443/smartcard', 'ws://127.0.0.1:8181/smartcard', 'ws://localhost:8181/smartcard'];
+      let connected = false;
+
+      for (let url of endpoints) {
+        connected = await connectWebSocketAgent(url);
+        if (connected) break;
+      }
+
       if (!connected) {
         progressBar.style.width = '100%';
         statusSpinner.classList.add('hidden');
-        statusText.innerText = "ไม่พบการเชื่อมต่อ Smart Card (โปรดใช้ WebCard Extension หรือ Agent Service)";
+        statusText.innerText = "ไม่พบการเชื่อมต่อ Smart Card (โปรดเปิด Agent Service หรือ WebCard Extension)";
       }
     }
 
-    function connectWebSocketAgent() {
+    function connectWebSocketAgent(url) {
       return new Promise((resolve) => {
         const progressBar = document.getElementById('progressBar');
         const statusText = document.getElementById('statusText');
         const statusSpinner = document.getElementById('statusSpinner');
 
         try {
-          const ws = new WebSocket('ws://localhost:8181/smartcard');
-          const timer = setTimeout(() => { ws.close(); resolve(false); }, 1200);
+          const ws = new WebSocket(url);
+          const timer = setTimeout(() => { ws.close(); resolve(false); }, 1000);
 
           ws.onopen = function() {
             clearTimeout(timer);
             progressBar.style.width = '70%';
-            statusText.innerText = "กำลังส่งคำสั่ง APDU อ่านข้อมูลบัตร...";
+            statusText.innerText = "กำลังยิงคำสั่ง APDU อ่านข้อมูลบัตร...";
             ws.send(JSON.stringify({ command: "READ_CARD" }));
           };
 
@@ -373,7 +384,7 @@
       document.getElementById('facePlaceholder').classList.add('hidden');
     }
 
-    // ADVANCED ZONED PARSER ENGINE (NO HARDCODE)
+    // PRECISION ZONED OCR ENGINE (NO HARDCODE)
     async function processCardImage(fullCanvas, dataUrl) {
       const ocrStatus = document.getElementById('ocrStatus');
       const cardPreview = document.getElementById('cardPreview');
@@ -389,71 +400,89 @@
       cardPreview.src = dataUrl;
       cardPreview.classList.remove('hidden');
       statusSpinner.classList.remove('hidden');
-      progressBar.style.width = '30%';
+      progressBar.style.width = '20%';
 
       try {
         cropFaceFromCanvas(fullCanvas);
-        progressBar.style.width = '50%';
-        statusText.innerText = "กำลังแยกพื้นที่ประมวลผล OCR...";
+        const w = fullCanvas.width;
+        const h = fullCanvas.height;
+
+        // Crop Zone 1: ชื่อ-นามสกุล ภาษาไทย (Y: 28% - 42%, X: 20% - 75%)
+        const nameCanvas = document.getElementById('nameCanvas');
+        const nameCtx = nameCanvas.getContext('2d');
+        const nameW = Math.floor(w * 0.55);
+        const nameH = Math.floor(h * 0.14);
+        nameCanvas.width = nameW;
+        nameCanvas.height = nameH;
+        nameCtx.drawImage(fullCanvas, Math.floor(w * 0.20), Math.floor(h * 0.28), nameW, nameH, 0, 0, nameW, nameH);
+
+        // Crop Zone 2: ที่อยู่ (Y: 55% - 78%, X: 10% - 68%)
+        const addrCanvas = document.getElementById('addrCanvas');
+        const addrCtx = addrCanvas.getContext('2d');
+        const addrW = Math.floor(w * 0.58);
+        const addrH = Math.floor(h * 0.23);
+        addrCanvas.width = addrW;
+        addrCanvas.height = addrH;
+        addrCtx.drawImage(fullCanvas, Math.floor(w * 0.10), Math.floor(h * 0.55), addrW, addrH, 0, 0, addrW, addrH);
+
+        progressBar.style.width = '40%';
+        statusText.innerText = "กำลังสแกนข้อความแยกตามโซน...";
 
         const worker = await Tesseract.createWorker(['tha', 'eng']);
         
-        // สแกนภาพเต็ม
+        // 1. อ่านเลขบัตร และวันเกิดจากภาพเต็ม
         const { data: { text: fullText } } = await worker.recognize(dataUrl);
 
-        progressBar.style.width = '80%';
+        // 2. อ่านชื่อจาก Zone ชื่อโดยตรง
+        const { data: { text: nameZoneText } } = await worker.recognize(nameCanvas.toDataURL('image/jpeg'));
 
-        // 1. ID Card Parser (13 หลัก)
+        // 3. อ่านที่หลังจาก Zone ที่อยู่โดยตรง
+        const { data: { text: addrZoneText } } = await worker.recognize(addrCanvas.toDataURL('image/jpeg'));
+
+        await worker.terminate();
+
+        progressBar.style.width = '85%';
+
+        // 1. ID Card Parser
         const idClean = fullText.replace(/[\s-]/g, '');
         const idMatches = idClean.match(/\d{13}/);
         const extractedID = idMatches ? formatIDCard(idMatches[0]) : "";
 
-        // 2. Name Parser (สกัดเฉพาะชื่อภาษาไทยที่มีคำนำหน้า)
-        let extractedName = "";
-        const nameMatch = fullText.match(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)\s*([ก-๙]+)\s+([ก-๙]+)/);
-        if (nameMatch) {
-          extractedName = `${nameMatch[1]} ${nameMatch[2]} ${nameMatch[3]}`;
+        // 2. Name Parser (สกัดเฉพาะภาษาไทยจาก Zone ชื่อ)
+        let extractedName = nameZoneText
+          .replace(/[A-Za-z0-9!@#$%^&*()_+=\-[\]{};:'",.<>/?\\|~`]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (!extractedName || extractedName.length < 3) {
+          const thaiPrefixMatch = fullText.match(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)\s*([ก-๙]+)\s+([ก-๙]+)/);
+          if (thaiPrefixMatch) {
+            extractedName = `${thaiPrefixMatch[1]} ${thaiPrefixMatch[2]} ${thaiPrefixMatch[3]}`;
+          }
         }
 
-        // 3. DOB Parser (ดักจับรูปแบบวัน เดือน ปี พ.ศ.)
+        // 3. DOB Parser
         let extractedDOB = "";
         const dobMatch = fullText.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s*(\d{4})/);
         if (dobMatch) {
           extractedDOB = `${dobMatch[1]} ${dobMatch[2]} ${dobMatch[3]}`;
         }
 
-        // 4. Address Clean Parser (ตัดตัวเลขขยะและวันออกบัตรที่ปนเข้ามาออก)
-        let extractedAddress = "";
-        const lines = fullText.split('\n');
-        let validAddressLines = [];
+        // 4. Address Parser (ลบ ค.ศ., วันออกบัตร, วันหมดอายุ ออก 100%)
+        let cleanAddress = addrZoneText
+          .replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™-]/g, ' ')
+          .replace(/^ที่อยู่\s*/, '')
+          .replace(/\b\d{1,2}\s+(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*\d*\b/g, '') // ลบรูปแบบวันออกบัตร
+          .replace(/\b(19\d\d|20\d\d)\b/g, '') // ลบ ค.ศ. เช่น 1972
+          .replace(/\b(150|160|200)\b/g, '') // ลบรหัสตัวเลขตกขอบ
+          .replace(/บางนา\s*เต้|บางนา\s*เตั/g, 'บางนาใต้')
+          .replace(/ลา\s*ซาล/g, 'ลาซาล')
+          .replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร')
+          .replace(/^[^0-9ก-๙]+/, '')
+          .replace(/\s+/g, ' ')
+          .trim();
 
-        for (let line of lines) {
-          let cleanLine = line.replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™-]/g, ' ').replace(/\s+/g, ' ').trim();
-          
-          // ข้ามบรรทัดส่วนหัวและวันหมดอายุ
-          if (cleanLine.includes("บัตรประจำตัวประชาชน") || cleanLine.includes("เกิดวันที่") || cleanLine.includes("ศาสนา") || cleanLine.includes("วันออกบัตร") || cleanLine.includes("หมดอายุ") || /\d{13}/.test(cleanLine.replace(/\s/g, ''))) {
-            continue;
-          }
-
-          if (cleanLine.includes("ที่อยู่") || /(\d+\/\d+|\d+)/.test(cleanLine) || cleanLine.includes("ซอย") || cleanLine.includes("ถนน") || cleanLine.includes("แขวง") || cleanLine.includes("เขต") || cleanLine.includes("ตำบล") || cleanLine.includes("อำเภอ") || cleanLine.includes("จังหวัด") || cleanLine.includes("กรุงเทพ")) {
-            validAddressLines.push(cleanLine.replace(/^ที่อยู่\s*/, ''));
-          }
-        }
-
-        if (validAddressLines.length > 0) {
-          extractedAddress = validAddressLines.join(' ')
-            .replace(/\b\d{1,2}\s+(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*\d*\b/g, '') // ลบรูปแบบวันที่ตกค้าง
-            .replace(/บางนา\s*เต้|บางนา\s*เตั/g, 'บางนาใต้')
-            .replace(/ลา\s*ซาล/g, 'ลาซาล')
-            .replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร')
-            .replace(/^[^0-9ก-๙]+/, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-        }
-
-        await worker.terminate();
-
-        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, "สแกนภาพถ่ายจริง (Dynamic OCR)");
+        fillFormData(extractedID, extractedName, extractedDOB, cleanAddress, null, "สแกนภาพถ่ายจริง (Dynamic Zoned OCR)");
 
       } catch (err) {
         console.error(err);
