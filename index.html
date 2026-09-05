@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V8.4 - Easy Camera & Reliable OCR</title>
+  <title>MKT Register V8.6 - In-App Focus Camera</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V8.4 (Easy Camera + Reliable OCR)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V8.6 (In-App Focus Camera)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -75,7 +75,6 @@
 
       <!-- Mode 2: Camera View -->
       <div id="modeCamera" class="hidden space-y-3">
-        <input type="file" id="nativeCameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleFileSelect(event)">
         <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
           <div id="cardGuide" class="hidden pointer-events-none absolute inset-0 items-center justify-center">
@@ -85,13 +84,17 @@
           </div>
           
           <div id="startState" class="p-6 text-center">
-            <button onclick="document.getElementById('nativeCameraInput').click()"
+            <button onclick="startCamera()"
                     class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-3 px-6 rounded-xl flex items-center justify-center gap-2 mx-auto active:scale-95 transition-all shadow-md">
-              <i data-lucide="camera" class="w-5 h-5"></i>
-              <span>ถ่ายด้วยกล้องมือถือ (แนะนำ)</span>
+              <i data-lucide="video" class="w-5 h-5"></i>
+              <span>เปิดกล้องสแกนบัตร</span>
             </button>
-            <button onclick="startCamera()" class="mt-3 text-xs text-teal-300 underline">เปิดกล้องในหน้าเว็บ</button>
-            <p class="text-xs text-slate-400 mt-2">โหมดกล้องมือถือจะ Focus และถ่ายภาพความละเอียดสูงกว่า</p>
+            <p class="text-xs text-slate-400 mt-2">วางบัตรในกรอบ ระบบจะช่วย Focus และขยายภาพ</p>
+          </div>
+
+          <div id="cameraControls" class="hidden absolute top-3 left-3 right-3 z-20 bg-black/55 rounded-lg px-3 py-2">
+            <div class="flex justify-between text-[11px] mb-1"><span id="focusText">กำลังปรับ Focus...</span><span id="zoomText">Zoom 1.0×</span></div>
+            <input id="zoomSlider" type="range" class="hidden w-full accent-teal-400" oninput="setCameraZoom(this.value)">
           </div>
 
           <button id="snapBtn" onclick="takeSnapshot()" class="hidden absolute bottom-3 bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 active:scale-95 transition-all">
@@ -200,6 +203,8 @@
     lucide.createIcons();
     let videoStream = null;
     let agentRetryInProgress = false;
+    let activeSmartCardSession = false;
+    let absentCardChecks = 0;
 
     async function waitForLocalAgent(maxAttempts = 12) {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -242,7 +247,39 @@
     window.onAndroidSmartCardRead = function(jsonData) {
       const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
       fillFormData(data.idCard, data.fullName, data.dob, data.address, data.photoBase64, "Android Native OTG SmartCard");
+      startCardRemovalWatch();
     };
+
+    function startCardRemovalWatch() {
+      activeSmartCardSession = true;
+      absentCardChecks = 0;
+    }
+
+    async function checkCardRemoval() {
+      if (!activeSmartCardSession || document.visibilityState === 'hidden') return;
+      try {
+        const response = await fetch('http://127.0.0.1:8181/card-status', { cache: 'no-store' });
+        if (!response.ok) return;
+        const state = await response.json();
+        if (state.status !== 'ok' || !state.readerReady) return;
+        if (state.cardPresent) {
+          absentCardChecks = 0;
+          return;
+        }
+        absentCardChecks++;
+        if (absentCardChecks < 2) return;
+        activeSmartCardSession = false;
+        absentCardChecks = 0;
+        clearFormInputs();
+        document.getElementById('ocrStatus').classList.remove('hidden');
+        document.getElementById('statusSpinner').classList.add('hidden');
+        document.getElementById('progressBar').style.width = '0%';
+        document.getElementById('statusText').innerText = 'นำบัตรออกแล้ว — ล้างข้อมูลผู้ป่วยจากหน้าจอเรียบร้อย';
+        document.getElementById('sourceLabel').innerText = 'ยังไม่มีข้อมูลผู้ป่วย';
+      } catch (_) { /* Agent หลุดชั่วคราว: ไม่ล้างข้อมูลเพื่อป้องกันข้อมูลหายผิดจังหวะ */ }
+    }
+
+    setInterval(checkCardRemoval, 800);
 
     function clearFormInputs() {
       document.getElementById('idCard').value = "";
@@ -286,6 +323,7 @@
       const progressBar = document.getElementById('progressBar');
       const statusSpinner = document.getElementById('statusSpinner');
 
+      activeSmartCardSession = false;
       clearFormInputs();
       ocrStatus.classList.remove('hidden');
       statusSpinner.classList.remove('hidden');
@@ -320,6 +358,7 @@
           ? "MKT SmartCard Agent (Android)"
           : "MKT SmartCard Agent (Windows)";
         fillFormData(data.idCard, data.fullName, data.dob, data.address, data.photoBase64, source);
+        startCardRemovalWatch();
         return;
       } catch (e) {
         console.error("Local agent error", e);
@@ -347,34 +386,65 @@
     // CAMERA OCR
     async function startCamera() {
       try {
-        videoStream = await navigator.mediaDevices.getUserMedia({ 
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            focusMode: { ideal: "continuous" }
-          }
-        });
+        const cameraConstraints = {
+          width: { ideal: 3840 }, height: { ideal: 2160 }, focusMode: { ideal: "continuous" }
+        };
+        try {
+          videoStream = await navigator.mediaDevices.getUserMedia({
+            video: { ...cameraConstraints, facingMode: { exact: "environment" } }
+          });
+        } catch (_) {
+          videoStream = await navigator.mediaDevices.getUserMedia({
+            video: { ...cameraConstraints, facingMode: { ideal: "environment" } }
+          });
+        }
         const video = document.getElementById('webcam');
         video.srcObject = videoStream;
+        await video.play();
         video.onclick = focusCamera;
+        const track = videoStream.getVideoTracks()[0];
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        const advanced = [];
+        if (caps.focusMode && caps.focusMode.includes('continuous')) advanced.push({ focusMode: 'continuous' });
+        if (caps.zoom) {
+          const preferredZoom = Math.min(caps.zoom.max, Math.max(caps.zoom.min, 1.7));
+          advanced.push({ zoom: preferredZoom });
+          const slider = document.getElementById('zoomSlider');
+          slider.min = caps.zoom.min; slider.max = caps.zoom.max; slider.step = caps.zoom.step || 0.1; slider.value = preferredZoom;
+          slider.classList.remove('hidden');
+          document.getElementById('zoomText').innerText = `Zoom ${Number(preferredZoom).toFixed(1)}×`;
+        }
+        if (advanced.length) await track.applyConstraints({ advanced });
         video.classList.remove('hidden');
         document.getElementById('cardGuide').classList.remove('hidden');
         document.getElementById('cardGuide').classList.add('flex');
         document.getElementById('startState').classList.add('hidden');
+        document.getElementById('cameraControls').classList.remove('hidden');
         document.getElementById('snapBtn').classList.remove('hidden');
+        setTimeout(() => { document.getElementById('focusText').innerText = 'พร้อมถ่าย • แตะภาพเพื่อ Focus'; }, 900);
       } catch (err) { alert("ไม่สามารถเปิดกล้องหลังได้ กรุณาอนุญาต Camera แล้วลองใหม่"); }
+    }
+
+    async function setCameraZoom(value) {
+      const track = videoStream && videoStream.getVideoTracks()[0];
+      if (!track) return;
+      try {
+        await track.applyConstraints({ advanced: [{ zoom: Number(value) }] });
+        document.getElementById('zoomText').innerText = `Zoom ${Number(value).toFixed(1)}×`;
+      } catch (_) {}
     }
 
     async function focusCamera() {
       const track = videoStream && videoStream.getVideoTracks()[0];
       if (!track) return;
       try {
+        document.getElementById('focusText').innerText = 'กำลัง Focus...';
         const caps = track.getCapabilities ? track.getCapabilities() : {};
         if (caps.focusMode && caps.focusMode.includes('single-shot')) {
           await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
           setTimeout(() => track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}), 700);
         }
+        setTimeout(() => { document.getElementById('focusText').innerText = 'Focus แล้ว • กดถ่ายได้'; }, 650);
       } catch (_) { /* บางรุ่นจัดการ focus อัตโนมัติ */ }
     }
 
@@ -387,26 +457,48 @@
       document.getElementById('cardGuide').classList.add('hidden');
       document.getElementById('cardGuide').classList.remove('flex');
       document.getElementById('snapBtn').classList.add('hidden');
+      document.getElementById('cameraControls').classList.add('hidden');
+      document.getElementById('zoomSlider').classList.add('hidden');
       document.getElementById('startState').classList.remove('hidden');
     }
 
-    function takeSnapshot() {
-      const video = document.getElementById('webcam');
-      const canvas = document.getElementById('cropCanvas');
+    function drawCardGuideCrop(source, sourceWidth, sourceHeight, canvas) {
       const ctx = canvas.getContext('2d');
-      const vw = video.videoWidth || 1920;
-      const vh = video.videoHeight || 1080;
       const ratio = 1.586;
-      let sw = Math.floor(vw * 0.94);
+      let sw = Math.floor(sourceWidth * 0.94);
       let sh = Math.floor(sw / ratio);
-      if (sh > vh * 0.90) { sh = Math.floor(vh * 0.90); sw = Math.floor(sh * ratio); }
-      const sx = Math.floor((vw - sw) / 2);
-      const sy = Math.floor((vh - sh) / 2);
+      if (sh > sourceHeight * 0.90) { sh = Math.floor(sourceHeight * 0.90); sw = Math.floor(sh * ratio); }
+      const sx = Math.floor((sourceWidth - sw) / 2);
+      const sy = Math.floor((sourceHeight - sh) / 2);
       canvas.width = sw;
       canvas.height = sh;
-      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
+    }
+
+    async function takeSnapshot() {
+      const video = document.getElementById('webcam');
+      const canvas = document.getElementById('cropCanvas');
+      const button = document.getElementById('snapBtn');
+      button.disabled = true;
+      document.getElementById('focusText').innerText = 'กำลังจับภาพความละเอียดสูง...';
+      await focusCamera();
+      await new Promise(resolve => setTimeout(resolve, 700));
+      try {
+        const track = videoStream && videoStream.getVideoTracks()[0];
+        if (track && 'ImageCapture' in window) {
+          const blob = await new ImageCapture(track).takePhoto();
+          const bitmap = await createImageBitmap(blob);
+          drawCardGuideCrop(bitmap, bitmap.width, bitmap.height, canvas);
+          bitmap.close();
+        } else {
+          drawCardGuideCrop(video, video.videoWidth || 1920, video.videoHeight || 1080, canvas);
+        }
+      } catch (_) {
+        drawCardGuideCrop(video, video.videoWidth || 1920, video.videoHeight || 1080, canvas);
+      }
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
       stopCamera();
+      button.disabled = false;
       processCardImage(canvas, dataUrl);
     }
 
@@ -601,6 +693,7 @@
       const progressBar = document.getElementById('progressBar');
       const statusSpinner = document.getElementById('statusSpinner');
 
+      activeSmartCardSession = false;
       clearFormInputs();
 
       ocrStatus.classList.remove('hidden');
@@ -635,23 +728,26 @@
           tessedit_pageseg_mode: '6'
         });
         const fullResult = await worker.recognize(ocrDataUrl);
-
-        // อ่านแถบบนซ้ำโดยจำกัดเป็นตัวเลข ช่วยแก้เลขบัตรที่สับสนกับ O/I/S
-        await worker.setParameters({
-          tessedit_char_whitelist: '0123456789- ',
-          tessedit_pageseg_mode: '6'
-        });
-        const idResult = await worker.recognize(ocrDataUrl, {
-          rectangle: { left: 0, top: 0, width: preparedCanvas.width, height: Math.round(preparedCanvas.height * 0.42) }
-        });
+        const fullText = fullResult.data.text || '';
+        let idScanText = '';
+        // อ่านแถบเลขซ้ำเฉพาะเมื่อรอบแรกยังไม่ได้เลขบัตรที่ checksum ถูกต้อง ช่วยลดเวลาสแกนทั่วไป
+        if (!isValidThaiID(extractThaiID(fullText))) {
+          await worker.setParameters({
+            tessedit_char_whitelist: '0123456789- ',
+            tessedit_pageseg_mode: '6'
+          });
+          const idResult = await worker.recognize(ocrDataUrl, {
+            rectangle: { left: 0, top: 0, width: preparedCanvas.width, height: Math.round(preparedCanvas.height * 0.42) }
+          });
+          idScanText = idResult.data.text || '';
+        }
         await worker.terminate();
 
         progressBar.style.width = '88%';
         statusText.innerText = "กำลังตรวจสอบความถูกต้องของข้อมูล...";
 
-        const fullText = fullResult.data.text || '';
         const lines = fullText.split('\n').map(normalizeThaiOcr).filter(Boolean);
-        const idDigits = extractThaiID(`${idResult.data.text}\n${fullText}`);
+        const idDigits = extractThaiID(`${idScanText}\n${fullText}`);
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
         const extractedName = extractName(lines);
         const extractedDOB = extractDob(fullText);
