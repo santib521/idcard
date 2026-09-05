@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V8.6 - In-App Focus Camera</title>
+  <title>MKT Register V8.7 - 20cm Camera & Browse Restore</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V8.6 (In-App Focus Camera)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V8.7 (20cm Camera + Browse Restore)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -407,7 +407,7 @@
         const advanced = [];
         if (caps.focusMode && caps.focusMode.includes('continuous')) advanced.push({ focusMode: 'continuous' });
         if (caps.zoom) {
-          const preferredZoom = Math.min(caps.zoom.max, Math.max(caps.zoom.min, 1.7));
+          const preferredZoom = Math.min(caps.zoom.max, Math.max(caps.zoom.min, 1.0));
           advanced.push({ zoom: preferredZoom });
           const slider = document.getElementById('zoomSlider');
           slider.min = caps.zoom.min; slider.max = caps.zoom.max; slider.step = caps.zoom.step || 0.1; slider.value = preferredZoom;
@@ -499,7 +499,7 @@
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
       stopCamera();
       button.disabled = false;
-      processCardImage(canvas, dataUrl);
+      processCardImage(canvas, dataUrl, { source: 'camera' });
     }
 
     // ปรับภาพให้เป็นสัดส่วนบัตร 85.60 x 53.98 มม. และเพิ่ม contrast สำหรับ OCR
@@ -588,7 +588,7 @@
         return numeric.match(/(?:\d[\s-]*){13}/g) || [];
       });
       const ids = candidates.map(v => v.replace(/\D/g, '')).filter(v => v.length === 13);
-      return ids.find(isValidThaiID) || ids[0] || '';
+      return ids.find(isValidThaiID) || '';
     }
 
     function extractName(lines) {
@@ -658,7 +658,7 @@
           canvas.width = img.width;
           canvas.height = img.height;
           ctx.drawImage(img, 0, 0);
-          processCardImage(canvas, event.target.result);
+          processCardImage(canvas, event.target.result, { source: 'browse' });
         };
         img.src = event.target.result;
       };
@@ -685,7 +685,7 @@
     }
 
     // CLEAN OCR PARSER ENGINE
-    async function processCardImage(fullCanvas, dataUrl) {
+    async function processCardImage(fullCanvas, dataUrl, options = { source: 'camera' }) {
       const ocrStatus = document.getElementById('ocrStatus');
       const cardPreview = document.getElementById('cardPreview');
       const cardIcon = document.getElementById('cardIcon');
@@ -706,7 +706,7 @@
       try {
         statusText.innerText = "กำลังปรับภาพและตรวจกรอบบัตร...";
         const sharpness = estimateSharpness(fullCanvas);
-        if (fullCanvas.width < 1000 || fullCanvas.height < 600 || sharpness < 7) {
+        if (options.source !== 'browse' && (fullCanvas.width < 900 || fullCanvas.height < 500 || sharpness < 4.5)) {
           throw new Error('IMAGE_QUALITY');
         }
         const preparedCanvas = prepareCardCanvas(fullCanvas);
