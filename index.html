@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V8.0 - Universal Android Hybrid</title>
+  <title>MKT Register V8.2 - Background Agent & Enhanced OCR</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V8.0 (Android OTG Ready)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V8.2 (Background Agent + Enhanced OCR)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -77,6 +77,11 @@
       <div id="modeCamera" class="hidden space-y-3">
         <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
+          <div id="cardGuide" class="hidden pointer-events-none absolute inset-0 items-center justify-center">
+            <div class="w-[90%] aspect-[1.586/1] border-2 border-white rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.28)] relative">
+              <span class="absolute -bottom-7 left-0 right-0 text-center text-xs text-white">วางบัตรให้อยู่ในกรอบและหลีกเลี่ยงแสงสะท้อน</span>
+            </div>
+          </div>
           
           <div id="startState" class="p-6 text-center">
             <button onclick="startCamera()" 
@@ -84,7 +89,7 @@
               <i data-lucide="video" class="w-5 h-5"></i>
               <span>เปิดกล้องถ่ายภาพ</span>
             </button>
-            <p class="text-xs text-slate-400 mt-2">สแกน OCR ผ่านกล้องถ่ายภาพ</p>
+            <p class="text-xs text-slate-400 mt-2">ถ่ายด้านหน้าบัตรให้เต็มกรอบ ภาพตรงและแสงสม่ำเสมอ</p>
           </div>
 
           <button id="snapBtn" onclick="takeSnapshot()" class="hidden absolute bottom-3 bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 active:scale-95 transition-all">
@@ -255,35 +260,68 @@
         return;
       }
 
-      // 2. ถ้าอยู่บน PC Demo ให้ส่ง HTTP ไปหา MKT-Agent.exe
+      // 2. ใช้ Local Agent ได้ทั้ง Windows และ Android
       try {
-        const res = await fetch('http://localhost:8181/read-card', { method: 'GET' });
-        if (res.ok) {
-          const data = await res.json();
-          fillFormData(data.idCard, data.fullName, data.dob, data.address, data.photoBase64, "MKT Local Agent (PC Demo)");
-          return;
-        }
-      } catch (e) {
-        console.log("Local agent not running");
-      }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        const res = await fetch('http://127.0.0.1:8181/read-card', {
+          method: 'GET',
+          cache: 'no-store',
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
 
-      progressBar.style.width = '100%';
-      statusSpinner.classList.add('hidden');
-      statusText.innerText = "ไม่พบการเชื่อมต่อ Smart Card (โปรดรัน Agent บน PC หรือเสียบ OTG บน Android)";
+        const data = await res.json();
+        if (!res.ok || data.status !== 'success') {
+          throw new Error(data.message || 'อ่านบัตรไม่สำเร็จ');
+        }
+
+        const source = /Android/i.test(navigator.userAgent)
+          ? "MKT SmartCard Agent (Android)"
+          : "MKT SmartCard Agent (Windows)";
+        fillFormData(data.idCard, data.fullName, data.dob, data.address, data.photoBase64, source);
+        return;
+      } catch (e) {
+        console.error("Local agent error", e);
+        progressBar.style.width = '100%';
+        statusSpinner.classList.add('hidden');
+        if (/Android/i.test(navigator.userAgent) && e.message === 'Failed to fetch') {
+          const lastStart = Number(sessionStorage.getItem('mktAgentStart') || 0);
+          if (Date.now() - lastStart > 5000) {
+            sessionStorage.setItem('mktAgentStart', String(Date.now()));
+            statusText.innerText = "กำลังเปิด MKT SmartCard Agent แล้วจะกลับมาหน้าเว็บ กรุณากดอ่านบัตรอีกครั้ง";
+            window.location.href = 'mkt-smartcard://start';
+            return;
+          }
+        }
+        statusText.innerText = e.name === 'AbortError'
+          ? "อ่านบัตรเกินเวลาที่กำหนด กรุณาถอดและเสียบบัตรใหม่"
+          : (e.message && e.message !== 'Failed to fetch'
+              ? e.message
+              : "ไม่พบ MKT SmartCard Agent กรุณาเปิด Agent ก่อนอ่านบัตร");
+        return;
+      }
     }
 
     // CAMERA OCR
     async function startCamera() {
       try {
         videoStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            focusMode: { ideal: "continuous" }
+          }
         });
         const video = document.getElementById('webcam');
         video.srcObject = videoStream;
         video.classList.remove('hidden');
+        document.getElementById('cardGuide').classList.remove('hidden');
+        document.getElementById('cardGuide').classList.add('flex');
         document.getElementById('startState').classList.add('hidden');
         document.getElementById('snapBtn').classList.remove('hidden');
-      } catch (err) { alert("ไม่สามารถเปิดกล้องได้"); }
+      } catch (err) { alert("ไม่สามารถเปิดกล้องหลังได้ กรุณาอนุญาต Camera แล้วลองใหม่"); }
     }
 
     function stopCamera() {
@@ -292,6 +330,8 @@
         videoStream = null;
       }
       document.getElementById('webcam').classList.add('hidden');
+      document.getElementById('cardGuide').classList.add('hidden');
+      document.getElementById('cardGuide').classList.remove('flex');
       document.getElementById('snapBtn').classList.add('hidden');
       document.getElementById('startState').classList.remove('hidden');
     }
@@ -300,12 +340,133 @@
       const video = document.getElementById('webcam');
       const canvas = document.getElementById('cropCanvas');
       const ctx = canvas.getContext('2d');
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+      canvas.width = video.videoWidth || 1920;
+      canvas.height = video.videoHeight || 1080;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg');
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
       stopCamera();
       processCardImage(canvas, dataUrl);
+    }
+
+    // ปรับภาพให้เป็นสัดส่วนบัตร 85.60 x 53.98 มม. และเพิ่ม contrast สำหรับ OCR
+    function prepareCardCanvas(sourceCanvas) {
+      const ratio = 1.586;
+      const srcW = sourceCanvas.width;
+      const srcH = sourceCanvas.height;
+      const currentRatio = srcW / srcH;
+      let sx = 0, sy = 0, sw = srcW, sh = srcH;
+
+      // ภาพกล้องมักมีฉากหลัง: crop กึ่งกลางตามกรอบ ส่วนภาพ Browse ที่ใกล้สัดส่วนบัตรใช้เต็มภาพ
+      if (currentRatio < 1.45 || currentRatio > 1.75) {
+        if (currentRatio > ratio) {
+          sw = Math.floor(srcH * ratio * 0.92);
+          sh = Math.floor(srcH * 0.92);
+        } else {
+          sw = Math.floor(srcW * 0.92);
+          sh = Math.floor(sw / ratio);
+        }
+        sx = Math.floor((srcW - sw) / 2);
+        sy = Math.floor((srcH - sh) / 2);
+      }
+
+      const out = document.createElement('canvas');
+      out.width = 1900;
+      out.height = Math.round(out.width / ratio);
+      const outCtx = out.getContext('2d', { willReadFrequently: true });
+      outCtx.imageSmoothingEnabled = true;
+      outCtx.imageSmoothingQuality = 'high';
+      outCtx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height);
+
+      const image = outCtx.getImageData(0, 0, out.width, out.height);
+      const p = image.data;
+      for (let i = 0; i < p.length; i += 4) {
+        const gray = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+        const enhanced = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 138));
+        p[i] = p[i + 1] = p[i + 2] = enhanced;
+      }
+      outCtx.putImageData(image, 0, 0);
+      return out;
+    }
+
+    function normalizeThaiOcr(text) {
+      return text
+        .replace(/[|]/g, ' ')
+        .replace(/[“”„]/g, '"')
+        .replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function isValidThaiID(value) {
+      const d = value.replace(/\D/g, '');
+      if (d.length !== 13) return false;
+      let sum = 0;
+      for (let i = 0; i < 12; i++) sum += Number(d[i]) * (13 - i);
+      return ((11 - (sum % 11)) % 10) === Number(d[12]);
+    }
+
+    function extractThaiID(text) {
+      const candidates = text.split(/\n/).flatMap(line => {
+        const numeric = line
+          .replace(/[OoО]/g, '0').replace(/[Il|]/g, '1').replace(/[Ss]/g, '5')
+          .replace(/[^0-9\s-]/g, ' ');
+        return numeric.match(/(?:\d[\s-]*){13}/g) || [];
+      });
+      const ids = candidates.map(v => v.replace(/\D/g, '')).filter(v => v.length === 13);
+      return ids.find(isValidThaiID) || ids[0] || '';
+    }
+
+    function extractName(lines) {
+      const title = /(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)\s*/;
+      for (const raw of lines) {
+        let line = normalizeThaiOcr(raw)
+          .replace(/^(ชื่อ(?:ตัวและชื่อสกุล)?|Name)\s*[:：-]?\s*/i, '')
+          .replace(/[A-Za-z0-9_.,:;()]/g, ' ').replace(/\s+/g, ' ').trim();
+        const match = line.match(title);
+        if (!match) continue;
+        line = line.slice(match.index)
+          .replace(/(เลขประจำตัว|Identification|เกิดวันที่|Date of Birth).*$/i, '')
+          .trim();
+        if ((line.match(/[ก-๙]/g) || []).length >= 6) return line;
+      }
+      return '';
+    }
+
+    function extractDob(text) {
+      const months = {
+        'ม.ค.':'มกราคม','มกราคม':'มกราคม','ก.พ.':'กุมภาพันธ์','กุมภาพันธ์':'กุมภาพันธ์',
+        'มี.ค.':'มีนาคม','มีนาคม':'มีนาคม','เม.ย.':'เมษายน','เมษายน':'เมษายน',
+        'พ.ค.':'พฤษภาคม','พฤษภาคม':'พฤษภาคม','มิ.ย.':'มิถุนายน','มิถุนายน':'มิถุนายน',
+        'ก.ค.':'กรกฎาคม','กรกฎาคม':'กรกฎาคม','ส.ค.':'สิงหาคม','สิงหาคม':'สิงหาคม',
+        'ก.ย.':'กันยายน','กันยายน':'กันยายน','ต.ค.':'ตุลาคม','ตุลาคม':'ตุลาคม',
+        'พ.ย.':'พฤศจิกายน','พฤศจิกายน':'พฤศจิกายน','ธ.ค.':'ธันวาคม','ธันวาคม':'ธันวาคม'
+      };
+      const monthPattern = Object.keys(months).sort((a,b) => b.length-a.length)
+        .map(v => v.replace(/\./g, '\\.')).join('|');
+      const labelled = text.match(new RegExp('(?:เกิดวันที่|วันเกิด|Date of Birth)?\\s*(\\d{1,2})\\s*(' + monthPattern + ')\\s*(\\d{4})', 'i'));
+      if (labelled) return `${Number(labelled[1])} ${months[labelled[2]] || labelled[2]} ${labelled[3]}`;
+      const numeric = text.match(/(?:เกิดวันที่|วันเกิด|Date of Birth)\s*[:：-]?\s*(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/i);
+      if (numeric) {
+        const names = ['', 'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+        const m = Number(numeric[2]);
+        if (m >= 1 && m <= 12) return `${Number(numeric[1])} ${names[m]} ${numeric[3]}`;
+      }
+      return '';
+    }
+
+    function extractAddress(lines) {
+      const start = lines.findIndex(v => /ที่อยู่/.test(v));
+      const selected = [];
+      for (let i = Math.max(0, start); i < lines.length; i++) {
+        let line = normalizeThaiOcr(lines[i]);
+        if (i > start && /(วันออกบัตร|วันบัตรหมดอายุ|Date of Issue|Date of Expiry|เจ้าพนักงาน)/i.test(line)) break;
+        if (start < 0 && !/(\d+\/\d+|หมู่|ซอย|ถนน|แขวง|เขต|ตำบล|อำเภอ|จังหวัด|กรุงเทพ)/.test(line)) continue;
+        line = line.replace(/^.*?ที่อยู่\s*[:：-]?\s*/, '')
+          .replace(/ศาสนา\s*(พุทธ|คริสต์|อิสลาม)?/g, '')
+          .replace(/[A-Za-z_<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (line.length > 2) selected.push(line);
+      }
+      return selected.join(' ').replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร').replace(/\s+/g, ' ').trim();
     }
 
     // BROWSE OCR
@@ -367,80 +528,71 @@
       progressBar.style.width = '30%';
 
       try {
-        cropFaceFromCanvas(fullCanvas);
-        progressBar.style.width = '60%';
-        statusText.innerText = "กำลังสแกนข้อความจากบัตร...";
+        statusText.innerText = "กำลังปรับภาพและตรวจกรอบบัตร...";
+        const preparedCanvas = prepareCardCanvas(fullCanvas);
+        const ocrDataUrl = preparedCanvas.toDataURL('image/png');
+        cropFaceFromCanvas(preparedCanvas);
+        progressBar.style.width = '45%';
 
-        const worker = await Tesseract.createWorker(['tha', 'eng']);
-        const { data: { text: fullText } } = await worker.recognize(dataUrl);
+        const worker = await Tesseract.createWorker(['tha', 'eng'], 1, {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              progressBar.style.width = `${45 + Math.round((m.progress || 0) * 35)}%`;
+              statusText.innerText = `กำลังอ่านข้อความจากบัตร ${Math.round((m.progress || 0) * 100)}%`;
+            }
+          }
+        });
+        await worker.setParameters({
+          preserve_interword_spaces: '1',
+          user_defined_dpi: '300',
+          tessedit_pageseg_mode: '6'
+        });
+        const fullResult = await worker.recognize(ocrDataUrl);
+
+        // อ่านแถบบนซ้ำโดยจำกัดเป็นตัวเลข ช่วยแก้เลขบัตรที่สับสนกับ O/I/S
+        await worker.setParameters({
+          tessedit_char_whitelist: '0123456789- ',
+          tessedit_pageseg_mode: '6'
+        });
+        const idResult = await worker.recognize(ocrDataUrl, {
+          rectangle: { left: 0, top: 0, width: preparedCanvas.width, height: Math.round(preparedCanvas.height * 0.42) }
+        });
         await worker.terminate();
 
-        progressBar.style.width = '85%';
+        progressBar.style.width = '88%';
+        statusText.innerText = "กำลังตรวจสอบความถูกต้องของข้อมูล...";
 
-        // 1. เลขบัตรประจำตัวประชาชน
-        const idClean = fullText.replace(/[\s-]/g, '');
-        const idMatches = idClean.match(/\d{13}/);
-        const extractedID = idMatches ? formatIDCard(idMatches[0]) : "";
+        const fullText = fullResult.data.text || '';
+        const lines = fullText.split('\n').map(normalizeThaiOcr).filter(Boolean);
+        const idDigits = extractThaiID(`${idResult.data.text}\n${fullText}`);
+        const extractedID = idDigits ? formatIDCard(idDigits) : '';
+        const extractedName = extractName(lines);
+        const extractedDOB = extractDob(fullText);
+        const extractedAddress = extractAddress(lines);
+        const confidence = Math.round(fullResult.data.confidence || 0);
 
-        // 2. ชื่อ-นามสกุล
-        let extractedName = "";
-        const lines = fullText.split('\n');
-        for (let l of lines) {
-          let cleanL = l.replace(/[A-Za-z0-9!@#$%^&*()_+=\-[\]{};:'",.<>/?\\|~`]/g, ' ').replace(/\s+/g, ' ').trim();
-          if (/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)/.test(cleanL)) {
-            let namePart = cleanL.substring(cleanL.search(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)/));
-            if (namePart.length >= 5 && !/[ก-๙]{10,}/.test(namePart)) {
-              extractedName = namePart;
-              break;
-            }
-          }
-        }
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null,
+          `OCR ภาพบัตร (ความมั่นใจ ${confidence}%)`);
 
-        // 3. วันเกิด
-        let extractedDOB = "";
-        const dobMatch = fullText.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s*(\d{4})/);
-        if (dobMatch) {
-          extractedDOB = `${dobMatch[1]} ${dobMatch[2]} ${dobMatch[3]}`;
-        }
+        const missing = [];
+        if (!idDigits || !isValidThaiID(idDigits)) missing.push('เลขบัตร');
+        if (!extractedName) missing.push('ชื่อ');
+        if (!extractedDOB) missing.push('วันเกิด');
+        if (!extractedAddress) missing.push('ที่อยู่');
+        ['idCard','fullName','dob','address'].forEach(id =>
+          document.getElementById(id).classList.remove('border-amber-500', 'bg-amber-50'));
+        if (!idDigits || !isValidThaiID(idDigits)) document.getElementById('idCard').classList.add('border-amber-500','bg-amber-50');
+        if (!extractedName) document.getElementById('fullName').classList.add('border-amber-500','bg-amber-50');
+        if (!extractedDOB) document.getElementById('dob').classList.add('border-amber-500','bg-amber-50');
+        if (!extractedAddress) document.getElementById('address').classList.add('border-amber-500','bg-amber-50');
 
-        // 4. ที่อยู่ (ลบคำขยะออก 100%)
-        let validAddrLines = [];
-        for (let l of lines) {
-          let cleanL = l.replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™-]/g, ' ').replace(/\s+/g, ' ').trim();
-
-          if (cleanL.includes("บัตรประจำตัวประชาชน") || cleanL.includes("เกิดวันที่") || cleanL.includes("วันออกบัตร") || cleanL.includes("หมดอายุ") || /\d{13}/.test(cleanL.replace(/\s/g, ''))) {
-            continue;
-          }
-
-          if (cleanL.includes("ที่อยู่") || /(\d+\/\d+|\d+)/.test(cleanL) || cleanL.includes("ซอย") || cleanL.includes("ถนน") || cleanL.includes("แขวง") || cleanL.includes("เขต") || cleanL.includes("ตำบล") || cleanL.includes("อำเภอ") || cleanL.includes("จังหวัด") || cleanL.includes("กรุงเทพ")) {
-            let cleanAddr = cleanL
-              .replace(/^ที่อยู่\s*/, '')
-              .replace(/ศาสนา\s*(พุทธ|คริสต์|อิสลาม|ค่อย|คอย)?/g, '')
-              .replace(/(พุทธ|คริสต์|อิสลาม)\s*(ค่อย|คอย)?/g, '')
-              .replace(/\b\d{1,2}\s+(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*\d*\b/g, '')
-              .replace(/\b(19\d\d|20\d\d)\b/g, '')
-              .replace(/\s+/g, ' ')
-              .trim();
-
-            if (cleanAddr.length > 2) {
-              validAddrLines.push(cleanAddr);
-            }
-          }
-        }
-
-        let extractedAddress = validAddrLines.join(' ')
-          .replace(/บางนา\s*เต้|บางนา\s*เตั/g, 'บางนาใต้')
-          .replace(/ลา\s*ซาล/g, 'ลาซาล')
-          .replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร')
-          .replace(/^[^0-9ก-๙]+/, '')
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, "สแกนภาพถ่ายจริง (Dynamic OCR)");
+        statusText.innerText = missing.length
+          ? `อ่านได้บางส่วน กรุณาตรวจสอบ: ${missing.join(', ')}`
+          : `อ่านข้อมูลครบแล้ว กรุณาตรวจสอบก่อนบันทึก (${confidence}%)`;
 
       } catch (err) {
         console.error(err);
-        statusText.innerText = "เกิดข้อผิดพลาดในการสแกนภาพ";
+        statusText.innerText = "สแกนภาพไม่สำเร็จ กรุณาถ่ายใหม่ให้บัตรตรง ชัด และไม่มีแสงสะท้อน";
         statusSpinner.classList.add('hidden');
       }
     }
