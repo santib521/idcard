@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V7.0 - Production Clean Parser</title>
+  <title>MKT Register V8.0 - Universal Android Hybrid</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,10 +27,10 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V7.0 (Production Clean)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V8.0 (Android OTG Ready)</p>
         </div>
       </div>
-      <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">MKT HIS Engine</span>
+      <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
     </div>
   </header>
 
@@ -57,14 +57,14 @@
         </button>
       </div>
 
-      <!-- Mode 1: Smart Card Reader -->
+      <!-- Mode 1: Smart Card Reader Mode -->
       <div id="modeReader" class="space-y-3">
         <div class="bg-teal-50/60 border-2 border-dashed border-teal-400/60 rounded-xl p-5 text-center">
           <div class="w-12 h-12 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center mx-auto mb-2">
             <i data-lucide="usb" class="w-6 h-6 animate-pulse"></i>
           </div>
           <h3 class="text-sm font-semibold text-slate-800">เครื่องอ่านบัตร ACS ACR39U-NF</h3>
-          <p class="text-xs text-slate-500 mt-1 mb-4">อ่านข้อมูลผ่าน MKT SmartCard Native Bridge / Agent</p>
+          <p class="text-xs text-slate-500 mt-1 mb-4">รองรับ Windows PC และ Android Tablet OTG</p>
 
           <button onclick="readSmartCardHardware()" class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold py-3 px-4 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-2">
             <i data-lucide="credit-card" class="w-4 h-4"></i>
@@ -73,7 +73,7 @@
         </div>
       </div>
 
-      <!-- Mode 2: Camera Stream View -->
+      <!-- Mode 2: Camera View -->
       <div id="modeCamera" class="hidden space-y-3">
         <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
@@ -94,7 +94,7 @@
         </div>
       </div>
 
-      <!-- Mode 3: Browse File View -->
+      <!-- Mode 3: Browse View -->
       <div id="modeBrowse" class="hidden space-y-3">
         <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
         <button onclick="document.getElementById('fileInput').click()" 
@@ -130,7 +130,7 @@
     <!-- Form Section -->
     <form id="regForm" onsubmit="handleSubmit(event)" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
       
-      <!-- Profile Header & Face Photo Crop Box -->
+      <!-- Profile Header -->
       <div class="border-b border-slate-100 pb-4 flex items-center gap-4">
         <div class="w-20 h-24 bg-slate-100 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center overflow-hidden flex-shrink-0 relative">
           <img id="facePreview" class="hidden w-full h-full object-cover" src="" alt="Face Crop">
@@ -193,6 +193,12 @@
     lucide.createIcons();
     let videoStream = null;
 
+    // ฟังก์ชันให้ Android Native App เรียกใช้ผ่าน WebView Interface Direct
+    window.onAndroidSmartCardRead = function(jsonData) {
+      const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+      fillFormData(data.idCard, data.fullName, data.dob, data.address, data.photoBase64, "Android Native OTG SmartCard");
+    };
+
     function clearFormInputs() {
       document.getElementById('idCard').value = "";
       document.getElementById('fullName').value = "";
@@ -228,7 +234,7 @@
       }
     }
 
-    // 1. SMART CARD CONNECTOR WITH CLEAR STATUS
+    // SMART CARD CONNECTOR (ANDROID DIRECT & HTTP AGENT DEMO)
     async function readSmartCardHardware() {
       const ocrStatus = document.getElementById('ocrStatus');
       const statusText = document.getElementById('statusText');
@@ -239,65 +245,34 @@
       ocrStatus.classList.remove('hidden');
       statusSpinner.classList.remove('hidden');
       progressBar.style.width = '30%';
-      statusText.innerText = "กำลังตรวจสอบการเชื่อมต่อ Smart Card Agent...";
+      statusText.innerText = "กำลังตรวจสอบการเชื่อมต่อเครื่องอ่าน...";
 
-      if (window.webcard) {
-        try {
-          const readers = await window.webcard.readers();
-          if (readers.length > 0) {
-            const card = await readers[0].connect();
-            const data = await card.readThaiID();
-            fillFormData(data.cid, data.fullName, data.dob, data.address, data.photoBase64, "ชิปบัตรประชาชน (Smart Card APDU)");
-            return;
-          }
-        } catch (e) { console.log(e); }
-      }
-
-      // ตรวจสอบ Agent
-      const connected = await connectWebSocketAgent('ws://localhost:8181/smartcard');
-      if (!connected) {
+      // 1. ถ้าอยู่บน Android Native App ให้เรียก Native OTG Interface
+      if (window.AndroidInterface && window.AndroidInterface.readSmartCard) {
+        window.AndroidInterface.readSmartCard();
         progressBar.style.width = '100%';
-        statusSpinner.classList.add('hidden');
-        statusText.innerText = "ไม่พบ Agent Service บนเครื่อง (สำหรับ Smart Card ต้องรัน MKT Native Agent)";
+        statusText.innerText = "กำลังดึงข้อมูลจากชิปการ์ดบน Android...";
+        return;
       }
+
+      // 2. ถ้าอยู่บน PC Demo ให้ส่ง HTTP ไปหา MKT-Agent.exe
+      try {
+        const res = await fetch('http://localhost:8181/read-card', { method: 'GET' });
+        if (res.ok) {
+          const data = await res.json();
+          fillFormData(data.idCard, data.fullName, data.dob, data.address, data.photoBase64, "MKT Local Agent (PC Demo)");
+          return;
+        }
+      } catch (e) {
+        console.log("Local agent not running");
+      }
+
+      progressBar.style.width = '100%';
+      statusSpinner.classList.add('hidden');
+      statusText.innerText = "ไม่พบการเชื่อมต่อ Smart Card (โปรดรัน Agent บน PC หรือเสียบ OTG บน Android)";
     }
 
-    function connectWebSocketAgent(url) {
-      return new Promise((resolve) => {
-        const progressBar = document.getElementById('progressBar');
-        const statusText = document.getElementById('statusText');
-        const statusSpinner = document.getElementById('statusSpinner');
-
-        try {
-          const ws = new WebSocket(url);
-          const timer = setTimeout(() => { ws.close(); resolve(false); }, 1000);
-
-          ws.onopen = function() {
-            clearTimeout(timer);
-            progressBar.style.width = '70%';
-            statusText.innerText = "กำลังส่งคำสั่ง APDU อ่านข้อมูลบัตร...";
-            ws.send(JSON.stringify({ command: "READ_CARD" }));
-          };
-
-          ws.onmessage = function(ev) {
-            const res = JSON.parse(ev.data);
-            if (res.status === "success") {
-              fillFormData(res.idCard, res.fullName, res.dob, res.address, res.photoBase64, "ชิปบัตรประชาชน (Smart Card APDU)");
-            } else {
-              progressBar.style.width = '100%';
-              statusSpinner.classList.add('hidden');
-              statusText.innerText = "โปรดเสียบบัตรประชาชนเข้ากับเครื่องอ่าน";
-            }
-            ws.close();
-            resolve(true);
-          };
-
-          ws.onerror = function() { clearTimeout(timer); resolve(false); };
-        } catch (err) { resolve(false); }
-      });
-    }
-
-    // 2. CAMERA OCR
+    // CAMERA OCR
     async function startCamera() {
       try {
         videoStream = await navigator.mediaDevices.getUserMedia({ 
@@ -333,7 +308,7 @@
       processCardImage(canvas, dataUrl);
     }
 
-    // 3. BROWSE OCR
+    // BROWSE OCR
     function handleFileSelect(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -373,7 +348,7 @@
       document.getElementById('facePlaceholder').classList.add('hidden');
     }
 
-    // PRODUCTION CLEAN OCR PARSER ENGINE
+    // CLEAN OCR PARSER ENGINE
     async function processCardImage(fullCanvas, dataUrl) {
       const ocrStatus = document.getElementById('ocrStatus');
       const cardPreview = document.getElementById('cardPreview');
@@ -402,21 +377,19 @@
 
         progressBar.style.width = '85%';
 
-        // 1. เลขบัตรประจำตัวประชาชน (13 หลัก)
+        // 1. เลขบัตรประจำตัวประชาชน
         const idClean = fullText.replace(/[\s-]/g, '');
         const idMatches = idClean.match(/\d{13}/);
         const extractedID = idMatches ? formatIDCard(idMatches[0]) : "";
 
-        // 2. ชื่อ-นามสกุล (ดึงบรรทัดที่มีคำนำหน้า และกรองภาษาต่างดาวออก)
+        // 2. ชื่อ-นามสกุล
         let extractedName = "";
         const lines = fullText.split('\n');
-        
         for (let l of lines) {
           let cleanL = l.replace(/[A-Za-z0-9!@#$%^&*()_+=\-[\]{};:'",.<>/?\\|~`]/g, ' ').replace(/\s+/g, ' ').trim();
           if (/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)/.test(cleanL)) {
-            // ตัดคำขยะก่อนหน้าคำนำหน้าออก
             let namePart = cleanL.substring(cleanL.search(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)/));
-            if (namePart.length >= 5 && !/[ก-๙]{10,}/.test(namePart)) { // กรองอักขระซ้ำเพี้ยน เช่น กู้ค้ลลลแล้
+            if (namePart.length >= 5 && !/[ก-๙]{10,}/.test(namePart)) {
               extractedName = namePart;
               break;
             }
@@ -430,23 +403,16 @@
           extractedDOB = `${dobMatch[1]} ${dobMatch[2]} ${dobMatch[3]}`;
         }
 
-        // 4. ที่อยู่ (กวาดคำว่า "ศาสนา", "พุทธ", วันออกบัตร/หมดอายุ ทิ้ง 100%)
+        // 4. ที่อยู่ (ลบคำขยะออก 100%)
         let validAddrLines = [];
         for (let l of lines) {
           let cleanL = l.replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™-]/g, ' ').replace(/\s+/g, ' ').trim();
 
-          // ข้ามบรรทัดขยะที่ไม่ใช่ที่อยู่
-          if (cleanL.includes("บัตรประจำตัวประชาชน") || 
-              cleanL.includes("เกิดวันที่") || 
-              cleanL.includes("วันออกบัตร") || 
-              cleanL.includes("หมดอายุ") || 
-              /\d{13}/.test(cleanL.replace(/\s/g, ''))) {
+          if (cleanL.includes("บัตรประจำตัวประชาชน") || cleanL.includes("เกิดวันที่") || cleanL.includes("วันออกบัตร") || cleanL.includes("หมดอายุ") || /\d{13}/.test(cleanL.replace(/\s/g, ''))) {
             continue;
           }
 
           if (cleanL.includes("ที่อยู่") || /(\d+\/\d+|\d+)/.test(cleanL) || cleanL.includes("ซอย") || cleanL.includes("ถนน") || cleanL.includes("แขวง") || cleanL.includes("เขต") || cleanL.includes("ตำบล") || cleanL.includes("อำเภอ") || cleanL.includes("จังหวัด") || cleanL.includes("กรุงเทพ")) {
-            
-            // ลบคำว่า ศาสนา พุทธ คริสต์ อิสลาม และตัวเลขตกค้างออก
             let cleanAddr = cleanL
               .replace(/^ที่อยู่\s*/, '')
               .replace(/ศาสนา\s*(พุทธ|คริสต์|อิสลาม|ค่อย|คอย)?/g, '')
