@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V8.3 - One-Tap Agent Recovery & Enhanced OCR</title>
+  <title>MKT Register V8.4 - Easy Camera & Reliable OCR</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V8.3 (One-Tap Agent + Enhanced OCR)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V8.4 (Easy Camera + Reliable OCR)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -75,21 +75,23 @@
 
       <!-- Mode 2: Camera View -->
       <div id="modeCamera" class="hidden space-y-3">
+        <input type="file" id="nativeCameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleFileSelect(event)">
         <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
           <div id="cardGuide" class="hidden pointer-events-none absolute inset-0 items-center justify-center">
-            <div class="w-[90%] aspect-[1.586/1] border-2 border-white rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.28)] relative">
-              <span class="absolute -bottom-7 left-0 right-0 text-center text-xs text-white">วางบัตรให้อยู่ในกรอบและหลีกเลี่ยงแสงสะท้อน</span>
+            <div class="w-[94%] aspect-[1.586/1] border-2 border-white rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.28)] relative">
+              <span class="absolute -bottom-7 left-0 right-0 text-center text-xs text-white">วางบัตรเต็มกรอบ • แตะภาพเพื่อ Focus • อย่าให้สะท้อน</span>
             </div>
           </div>
           
           <div id="startState" class="p-6 text-center">
-            <button onclick="startCamera()" 
+            <button onclick="document.getElementById('nativeCameraInput').click()"
                     class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-3 px-6 rounded-xl flex items-center justify-center gap-2 mx-auto active:scale-95 transition-all shadow-md">
-              <i data-lucide="video" class="w-5 h-5"></i>
-              <span>เปิดกล้องถ่ายภาพ</span>
+              <i data-lucide="camera" class="w-5 h-5"></i>
+              <span>ถ่ายด้วยกล้องมือถือ (แนะนำ)</span>
             </button>
-            <p class="text-xs text-slate-400 mt-2">ถ่ายด้านหน้าบัตรให้เต็มกรอบ ภาพตรงและแสงสม่ำเสมอ</p>
+            <button onclick="startCamera()" class="mt-3 text-xs text-teal-300 underline">เปิดกล้องในหน้าเว็บ</button>
+            <p class="text-xs text-slate-400 mt-2">โหมดกล้องมือถือจะ Focus และถ่ายภาพความละเอียดสูงกว่า</p>
           </div>
 
           <button id="snapBtn" onclick="takeSnapshot()" class="hidden absolute bottom-3 bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 active:scale-95 transition-all">
@@ -355,12 +357,25 @@
         });
         const video = document.getElementById('webcam');
         video.srcObject = videoStream;
+        video.onclick = focusCamera;
         video.classList.remove('hidden');
         document.getElementById('cardGuide').classList.remove('hidden');
         document.getElementById('cardGuide').classList.add('flex');
         document.getElementById('startState').classList.add('hidden');
         document.getElementById('snapBtn').classList.remove('hidden');
       } catch (err) { alert("ไม่สามารถเปิดกล้องหลังได้ กรุณาอนุญาต Camera แล้วลองใหม่"); }
+    }
+
+    async function focusCamera() {
+      const track = videoStream && videoStream.getVideoTracks()[0];
+      if (!track) return;
+      try {
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.focusMode && caps.focusMode.includes('single-shot')) {
+          await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
+          setTimeout(() => track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}), 700);
+        }
+      } catch (_) { /* บางรุ่นจัดการ focus อัตโนมัติ */ }
     }
 
     function stopCamera() {
@@ -379,9 +394,17 @@
       const video = document.getElementById('webcam');
       const canvas = document.getElementById('cropCanvas');
       const ctx = canvas.getContext('2d');
-      canvas.width = video.videoWidth || 1920;
-      canvas.height = video.videoHeight || 1080;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const vw = video.videoWidth || 1920;
+      const vh = video.videoHeight || 1080;
+      const ratio = 1.586;
+      let sw = Math.floor(vw * 0.94);
+      let sh = Math.floor(sw / ratio);
+      if (sh > vh * 0.90) { sh = Math.floor(vh * 0.90); sw = Math.floor(sh * ratio); }
+      const sx = Math.floor((vw - sw) / 2);
+      const sy = Math.floor((vh - sh) / 2);
+      canvas.width = sw;
+      canvas.height = sh;
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
       stopCamera();
       processCardImage(canvas, dataUrl);
@@ -425,6 +448,27 @@
       }
       outCtx.putImageData(image, 0, 0);
       return out;
+    }
+
+    function estimateSharpness(canvas) {
+      const sample = document.createElement('canvas');
+      sample.width = 320;
+      sample.height = Math.max(180, Math.round(320 * canvas.height / canvas.width));
+      const c = sample.getContext('2d', { willReadFrequently: true });
+      c.drawImage(canvas, 0, 0, sample.width, sample.height);
+      const p = c.getImageData(0, 0, sample.width, sample.height).data;
+      let total = 0, count = 0;
+      for (let y = 1; y < sample.height - 1; y += 2) {
+        for (let x = 1; x < sample.width - 1; x += 2) {
+          const i = (y * sample.width + x) * 4;
+          const l = .299*p[i] + .587*p[i+1] + .114*p[i+2];
+          const j = (y * sample.width + x + 1) * 4;
+          const k = ((y + 1) * sample.width + x) * 4;
+          total += Math.abs(l-(.299*p[j]+.587*p[j+1]+.114*p[j+2])) + Math.abs(l-(.299*p[k]+.587*p[k+1]+.114*p[k+2]));
+          count++;
+        }
+      }
+      return count ? total / count : 0;
     }
 
     function normalizeThaiOcr(text) {
@@ -568,6 +612,10 @@
 
       try {
         statusText.innerText = "กำลังปรับภาพและตรวจกรอบบัตร...";
+        const sharpness = estimateSharpness(fullCanvas);
+        if (fullCanvas.width < 1000 || fullCanvas.height < 600 || sharpness < 7) {
+          throw new Error('IMAGE_QUALITY');
+        }
         const preparedCanvas = prepareCardCanvas(fullCanvas);
         const ocrDataUrl = preparedCanvas.toDataURL('image/png');
         cropFaceFromCanvas(preparedCanvas);
@@ -611,7 +659,7 @@
         const confidence = Math.round(fullResult.data.confidence || 0);
 
         fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null,
-          `OCR ภาพบัตร (ความมั่นใจ ${confidence}%)`);
+          `OCR ภาพบัตร (ความมั่นใจ ${confidence}%)`, false);
 
         const missing = [];
         if (!idDigits || !isValidThaiID(idDigits)) missing.push('เลขบัตร');
@@ -628,15 +676,24 @@
         statusText.innerText = missing.length
           ? `อ่านได้บางส่วน กรุณาตรวจสอบ: ${missing.join(', ')}`
           : `อ่านข้อมูลครบแล้ว กรุณาตรวจสอบก่อนบันทึก (${confidence}%)`;
+        const essentialCount = [idDigits && isValidThaiID(idDigits), extractedName, extractedAddress].filter(Boolean).length;
+        const badge = document.getElementById('ocrBadge');
+        badge.classList.remove('hidden');
+        badge.className = essentialCount >= 2
+          ? 'inline-block mt-2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-medium'
+          : 'inline-block mt-2 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-medium';
+        badge.innerText = essentialCount >= 2 ? 'OCR สำเร็จ — โปรดตรวจสอบ' : 'ภาพไม่ชัด/ข้อมูลไม่พอ — กรุณาถ่ายใหม่';
 
       } catch (err) {
         console.error(err);
-        statusText.innerText = "สแกนภาพไม่สำเร็จ กรุณาถ่ายใหม่ให้บัตรตรง ชัด และไม่มีแสงสะท้อน";
+        statusText.innerText = err.message === 'IMAGE_QUALITY'
+          ? "ภาพเล็กหรือเบลอเกินไป กรุณาถ่ายใหม่ด้วยปุ่ม ‘กล้องมือถือ’ ให้บัตรเต็มภาพ"
+          : "สแกนภาพไม่สำเร็จ กรุณาถ่ายใหม่ให้บัตรตรง ชัด และไม่มีแสงสะท้อน";
         statusSpinner.classList.add('hidden');
       }
     }
 
-    function fillFormData(id, name, dob, address, photoBase64, sourceText) {
+    function fillFormData(id, name, dob, address, photoBase64, sourceText, showSuccess = true) {
       const progressBar = document.getElementById('progressBar');
       const statusText = document.getElementById('statusText');
       const statusSpinner = document.getElementById('statusSpinner');
@@ -656,8 +713,10 @@
       statusSpinner.classList.add('hidden');
       statusText.innerText = "สแกนและสกัดข้อมูลสำเร็จ!";
       document.getElementById('sourceLabel').innerText = "แหล่งข้อมูล: " + sourceText;
-      document.getElementById('ocrBadge').classList.remove('hidden');
-      document.getElementById('ocrBadge').innerText = "Extracted Success";
+      if (showSuccess) {
+        document.getElementById('ocrBadge').classList.remove('hidden');
+        document.getElementById('ocrBadge').innerText = "Extracted Success";
+      }
     }
 
     function formatIDCard(id) {
