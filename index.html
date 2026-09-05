@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V6.0 - Zoned OCR & Dual WSS Bridge</title>
+  <title>MKT Register V7.0 - Production Clean Parser</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -17,11 +17,8 @@
 </head>
 <body class="bg-slate-100 min-h-screen pb-10">
 
-  <!-- Canvases สำหรับ Crop แต่ละส่วนของบัตร -->
   <canvas id="cropCanvas" class="hidden"></canvas>
   <canvas id="faceCanvas" class="hidden"></canvas>
-  <canvas id="nameCanvas" class="hidden"></canvas>
-  <canvas id="addrCanvas" class="hidden"></canvas>
 
   <!-- Header -->
   <header class="bg-teal-700 text-white p-4 shadow-md sticky top-0 z-10">
@@ -30,10 +27,10 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V6.0 (Zoned Precision)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V7.0 (Production Clean)</p>
         </div>
       </div>
-      <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
+      <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">MKT HIS Engine</span>
     </div>
   </header>
 
@@ -67,7 +64,7 @@
             <i data-lucide="usb" class="w-6 h-6 animate-pulse"></i>
           </div>
           <h3 class="text-sm font-semibold text-slate-800">เครื่องอ่านบัตร ACS ACR39U-NF</h3>
-          <p class="text-xs text-slate-500 mt-1 mb-4">เสียบบัตรประชาชนเข้ากับเครื่องอ่านเพื่อดึงข้อมูลชิป 100%</p>
+          <p class="text-xs text-slate-500 mt-1 mb-4">อ่านข้อมูลผ่าน MKT SmartCard Native Bridge / Agent</p>
 
           <button onclick="readSmartCardHardware()" class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold py-3 px-4 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-2">
             <i data-lucide="credit-card" class="w-4 h-4"></i>
@@ -231,7 +228,7 @@
       }
     }
 
-    // 1. SMART CARD READER DUAL WSS / HTTP CONNECTOR
+    // 1. SMART CARD CONNECTOR WITH CLEAR STATUS
     async function readSmartCardHardware() {
       const ocrStatus = document.getElementById('ocrStatus');
       const statusText = document.getElementById('statusText');
@@ -242,9 +239,8 @@
       ocrStatus.classList.remove('hidden');
       statusSpinner.classList.remove('hidden');
       progressBar.style.width = '30%';
-      statusText.innerText = "กำลังเชื่อมต่อเครื่องอ่าน ACS ACR39U-NF...";
+      statusText.innerText = "กำลังตรวจสอบการเชื่อมต่อ Smart Card Agent...";
 
-      // ตรวจสอบ WebCard Extension
       if (window.webcard) {
         try {
           const readers = await window.webcard.readers();
@@ -257,19 +253,12 @@
         } catch (e) { console.log(e); }
       }
 
-      // ตรวจสอบ WebSocket Agent ทั้งแบบ Secure WSS และ WS
-      const endpoints = ['wss://localhost:8443/smartcard', 'ws://127.0.0.1:8181/smartcard', 'ws://localhost:8181/smartcard'];
-      let connected = false;
-
-      for (let url of endpoints) {
-        connected = await connectWebSocketAgent(url);
-        if (connected) break;
-      }
-
+      // ตรวจสอบ Agent
+      const connected = await connectWebSocketAgent('ws://localhost:8181/smartcard');
       if (!connected) {
         progressBar.style.width = '100%';
         statusSpinner.classList.add('hidden');
-        statusText.innerText = "ไม่พบการเชื่อมต่อ Smart Card (โปรดเปิด Agent Service หรือ WebCard Extension)";
+        statusText.innerText = "ไม่พบ Agent Service บนเครื่อง (สำหรับ Smart Card ต้องรัน MKT Native Agent)";
       }
     }
 
@@ -286,7 +275,7 @@
           ws.onopen = function() {
             clearTimeout(timer);
             progressBar.style.width = '70%';
-            statusText.innerText = "กำลังยิงคำสั่ง APDU อ่านข้อมูลบัตร...";
+            statusText.innerText = "กำลังส่งคำสั่ง APDU อ่านข้อมูลบัตร...";
             ws.send(JSON.stringify({ command: "READ_CARD" }));
           };
 
@@ -384,7 +373,7 @@
       document.getElementById('facePlaceholder').classList.add('hidden');
     }
 
-    // PRECISION ZONED OCR ENGINE (NO HARDCODE)
+    // PRODUCTION CLEAN OCR PARSER ENGINE
     async function processCardImage(fullCanvas, dataUrl) {
       const ocrStatus = document.getElementById('ocrStatus');
       const cardPreview = document.getElementById('cardPreview');
@@ -400,81 +389,80 @@
       cardPreview.src = dataUrl;
       cardPreview.classList.remove('hidden');
       statusSpinner.classList.remove('hidden');
-      progressBar.style.width = '20%';
+      progressBar.style.width = '30%';
 
       try {
         cropFaceFromCanvas(fullCanvas);
-        const w = fullCanvas.width;
-        const h = fullCanvas.height;
-
-        // Crop Zone 1: ชื่อ-นามสกุล ภาษาไทย (Y: 28% - 42%, X: 20% - 75%)
-        const nameCanvas = document.getElementById('nameCanvas');
-        const nameCtx = nameCanvas.getContext('2d');
-        const nameW = Math.floor(w * 0.55);
-        const nameH = Math.floor(h * 0.14);
-        nameCanvas.width = nameW;
-        nameCanvas.height = nameH;
-        nameCtx.drawImage(fullCanvas, Math.floor(w * 0.20), Math.floor(h * 0.28), nameW, nameH, 0, 0, nameW, nameH);
-
-        // Crop Zone 2: ที่อยู่ (Y: 55% - 78%, X: 10% - 68%)
-        const addrCanvas = document.getElementById('addrCanvas');
-        const addrCtx = addrCanvas.getContext('2d');
-        const addrW = Math.floor(w * 0.58);
-        const addrH = Math.floor(h * 0.23);
-        addrCanvas.width = addrW;
-        addrCanvas.height = addrH;
-        addrCtx.drawImage(fullCanvas, Math.floor(w * 0.10), Math.floor(h * 0.55), addrW, addrH, 0, 0, addrW, addrH);
-
-        progressBar.style.width = '40%';
-        statusText.innerText = "กำลังสแกนข้อความแยกตามโซน...";
+        progressBar.style.width = '60%';
+        statusText.innerText = "กำลังสแกนข้อความจากบัตร...";
 
         const worker = await Tesseract.createWorker(['tha', 'eng']);
-        
-        // 1. อ่านเลขบัตร และวันเกิดจากภาพเต็ม
         const { data: { text: fullText } } = await worker.recognize(dataUrl);
-
-        // 2. อ่านชื่อจาก Zone ชื่อโดยตรง
-        const { data: { text: nameZoneText } } = await worker.recognize(nameCanvas.toDataURL('image/jpeg'));
-
-        // 3. อ่านที่หลังจาก Zone ที่อยู่โดยตรง
-        const { data: { text: addrZoneText } } = await worker.recognize(addrCanvas.toDataURL('image/jpeg'));
-
         await worker.terminate();
 
         progressBar.style.width = '85%';
 
-        // 1. ID Card Parser
+        // 1. เลขบัตรประจำตัวประชาชน (13 หลัก)
         const idClean = fullText.replace(/[\s-]/g, '');
         const idMatches = idClean.match(/\d{13}/);
         const extractedID = idMatches ? formatIDCard(idMatches[0]) : "";
 
-        // 2. Name Parser (สกัดเฉพาะภาษาไทยจาก Zone ชื่อ)
-        let extractedName = nameZoneText
-          .replace(/[A-Za-z0-9!@#$%^&*()_+=\-[\]{};:'",.<>/?\\|~`]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        if (!extractedName || extractedName.length < 3) {
-          const thaiPrefixMatch = fullText.match(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)\s*([ก-๙]+)\s+([ก-๙]+)/);
-          if (thaiPrefixMatch) {
-            extractedName = `${thaiPrefixMatch[1]} ${thaiPrefixMatch[2]} ${thaiPrefixMatch[3]}`;
+        // 2. ชื่อ-นามสกุล (ดึงบรรทัดที่มีคำนำหน้า และกรองภาษาต่างดาวออก)
+        let extractedName = "";
+        const lines = fullText.split('\n');
+        
+        for (let l of lines) {
+          let cleanL = l.replace(/[A-Za-z0-9!@#$%^&*()_+=\-[\]{};:'",.<>/?\\|~`]/g, ' ').replace(/\s+/g, ' ').trim();
+          if (/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)/.test(cleanL)) {
+            // ตัดคำขยะก่อนหน้าคำนำหน้าออก
+            let namePart = cleanL.substring(cleanL.search(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)/));
+            if (namePart.length >= 5 && !/[ก-๙]{10,}/.test(namePart)) { // กรองอักขระซ้ำเพี้ยน เช่น กู้ค้ลลลแล้
+              extractedName = namePart;
+              break;
+            }
           }
         }
 
-        // 3. DOB Parser
+        // 3. วันเกิด
         let extractedDOB = "";
         const dobMatch = fullText.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s*(\d{4})/);
         if (dobMatch) {
           extractedDOB = `${dobMatch[1]} ${dobMatch[2]} ${dobMatch[3]}`;
         }
 
-        // 4. Address Parser (ลบ ค.ศ., วันออกบัตร, วันหมดอายุ ออก 100%)
-        let cleanAddress = addrZoneText
-          .replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™-]/g, ' ')
-          .replace(/^ที่อยู่\s*/, '')
-          .replace(/\b\d{1,2}\s+(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*\d*\b/g, '') // ลบรูปแบบวันออกบัตร
-          .replace(/\b(19\d\d|20\d\d)\b/g, '') // ลบ ค.ศ. เช่น 1972
-          .replace(/\b(150|160|200)\b/g, '') // ลบรหัสตัวเลขตกขอบ
+        // 4. ที่อยู่ (กวาดคำว่า "ศาสนา", "พุทธ", วันออกบัตร/หมดอายุ ทิ้ง 100%)
+        let validAddrLines = [];
+        for (let l of lines) {
+          let cleanL = l.replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™-]/g, ' ').replace(/\s+/g, ' ').trim();
+
+          // ข้ามบรรทัดขยะที่ไม่ใช่ที่อยู่
+          if (cleanL.includes("บัตรประจำตัวประชาชน") || 
+              cleanL.includes("เกิดวันที่") || 
+              cleanL.includes("วันออกบัตร") || 
+              cleanL.includes("หมดอายุ") || 
+              /\d{13}/.test(cleanL.replace(/\s/g, ''))) {
+            continue;
+          }
+
+          if (cleanL.includes("ที่อยู่") || /(\d+\/\d+|\d+)/.test(cleanL) || cleanL.includes("ซอย") || cleanL.includes("ถนน") || cleanL.includes("แขวง") || cleanL.includes("เขต") || cleanL.includes("ตำบล") || cleanL.includes("อำเภอ") || cleanL.includes("จังหวัด") || cleanL.includes("กรุงเทพ")) {
+            
+            // ลบคำว่า ศาสนา พุทธ คริสต์ อิสลาม และตัวเลขตกค้างออก
+            let cleanAddr = cleanL
+              .replace(/^ที่อยู่\s*/, '')
+              .replace(/ศาสนา\s*(พุทธ|คริสต์|อิสลาม|ค่อย|คอย)?/g, '')
+              .replace(/(พุทธ|คริสต์|อิสลาม)\s*(ค่อย|คอย)?/g, '')
+              .replace(/\b\d{1,2}\s+(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*\d*\b/g, '')
+              .replace(/\b(19\d\d|20\d\d)\b/g, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            if (cleanAddr.length > 2) {
+              validAddrLines.push(cleanAddr);
+            }
+          }
+        }
+
+        let extractedAddress = validAddrLines.join(' ')
           .replace(/บางนา\s*เต้|บางนา\s*เตั/g, 'บางนาใต้')
           .replace(/ลา\s*ซาล/g, 'ลาซาล')
           .replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร')
@@ -482,7 +470,7 @@
           .replace(/\s+/g, ' ')
           .trim();
 
-        fillFormData(extractedID, extractedName, extractedDOB, cleanAddress, null, "สแกนภาพถ่ายจริง (Dynamic Zoned OCR)");
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, "สแกนภาพถ่ายจริง (Dynamic OCR)");
 
       } catch (err) {
         console.error(err);
