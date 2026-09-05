@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V5.1 - Fixed OCR & Smart Card Adapter</title>
+  <title>MKT Register V5.2 - Zoned OCR & Smart Card</title>
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Tesseract.js Engine -->
   <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
@@ -14,27 +17,33 @@
 </head>
 <body class="bg-slate-100 min-h-screen pb-10">
 
+  <!-- Canvases สำหรับสกัดพื้นที่ต่าง ๆ ของบัตร -->
   <canvas id="cropCanvas" class="hidden"></canvas>
   <canvas id="faceCanvas" class="hidden"></canvas>
+  <canvas id="zoneCanvas" class="hidden"></canvas>
 
+  <!-- Header -->
   <header class="bg-teal-700 text-white p-4 shadow-md sticky top-0 z-10">
     <div class="max-w-md mx-auto flex items-center justify-between">
       <div class="flex items-center gap-2">
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V5.1</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V5.2 (Zone Processed)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
     </div>
   </header>
 
+  <!-- Main Container -->
   <main class="max-w-md mx-auto p-4 space-y-4">
 
+    <!-- Input Mode Switcher Card -->
     <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
       <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">เลือกวิธีนำเข้าข้อมูลบัตร</label>
       
+      <!-- Mode Tabs Button -->
       <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl mb-4">
         <button id="tabReader" onclick="switchMode('reader')" class="py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1">
           <i data-lucide="cpu" class="w-4 h-4"></i>
@@ -123,6 +132,7 @@
     <!-- Form Section -->
     <form id="regForm" onsubmit="handleSubmit(event)" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
       
+      <!-- Profile Header -->
       <div class="border-b border-slate-100 pb-4 flex items-center gap-4">
         <div class="w-20 h-24 bg-slate-100 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center overflow-hidden flex-shrink-0 relative">
           <img id="facePreview" class="hidden w-full h-full object-cover" src="" alt="Face Crop">
@@ -139,6 +149,7 @@
         </div>
       </div>
 
+      <!-- เลขบัตรประชาชน -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">เลขบัตรประจำตัวประชาชน *</label>
         <div class="relative">
@@ -148,18 +159,21 @@
         </div>
       </div>
 
+      <!-- ชื่อ-นามสกุล -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">ชื่อ - นามสกุล (ภาษาไทย) *</label>
         <input type="text" id="fullName" placeholder="รอผลการนำเข้าข้อมูล..." required
                class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
       </div>
 
+      <!-- วันเกิด -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">วันเกิด (จากบัตร)</label>
         <input type="text" id="dob" placeholder="รอผลการนำเข้าข้อมูล..." 
                class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
       </div>
 
+      <!-- ที่อยู่ตามบัตรประชาชน -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">ที่อยู่ตามบัตรประชาชน</label>
         <div class="relative">
@@ -215,7 +229,7 @@
       }
     }
 
-    // 1. SMART CARD READER ADAPTER
+    // 1. SMART CARD CONNECTOR
     async function readSmartCardHardware() {
       const ocrStatus = document.getElementById('ocrStatus');
       const statusText = document.getElementById('statusText');
@@ -359,7 +373,7 @@
       document.getElementById('facePlaceholder').classList.add('hidden');
     }
 
-    // IMPROVED PARSER ENGINE (FIX NAME & ADDRESS)
+    // ADVANCED ZONED PARSER ENGINE (NO HARDCODE)
     async function processCardImage(fullCanvas, dataUrl) {
       const ocrStatus = document.getElementById('ocrStatus');
       const cardPreview = document.getElementById('cardPreview');
@@ -380,58 +394,55 @@
       try {
         cropFaceFromCanvas(fullCanvas);
         progressBar.style.width = '50%';
-        statusText.innerText = "กำลังสแกนข้อความจริงจากภาพ...";
+        statusText.innerText = "กำลังแยกพื้นที่ประมวลผล OCR...";
 
         const worker = await Tesseract.createWorker(['tha', 'eng']);
-        const { data: { text } } = await worker.recognize(dataUrl);
-        await worker.terminate();
+        
+        // สแกนภาพเต็ม
+        const { data: { text: fullText } } = await worker.recognize(dataUrl);
 
-        progressBar.style.width = '85%';
+        progressBar.style.width = '80%';
 
-        // 1. ID Card Parser
-        const idClean = text.replace(/[\s-]/g, '');
+        // 1. ID Card Parser (13 หลัก)
+        const idClean = fullText.replace(/[\s-]/g, '');
         const idMatches = idClean.match(/\d{13}/);
         const extractedID = idMatches ? formatIDCard(idMatches[0]) : "";
 
-        // 2. Name Parser (ดักจับคำนำหน้าไทยทุกรูปแบบ)
+        // 2. Name Parser (สกัดเฉพาะชื่อภาษาไทยที่มีคำนำหน้า)
         let extractedName = "";
-        const nameMatch = text.match(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)\s*([ก-๙]+)\s+([ก-๙]+)/);
+        const nameMatch = fullText.match(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)\s*([ก-๙]+)\s+([ก-๙]+)/);
         if (nameMatch) {
           extractedName = `${nameMatch[1]} ${nameMatch[2]} ${nameMatch[3]}`;
-        } else {
-          const lines = text.split('\n');
-          for (let l of lines) {
-            let cleanL = l.replace(/[A-Za-z0-9!@#$%^&*()_+=\-[\]{};:'",.<>/?\\|~`]/g, ' ').trim();
-            if (/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง)/.test(cleanL)) {
-              extractedName = cleanL.replace(/\s+/g, ' ');
-              break;
-            }
-          }
         }
 
-        // 3. DOB Parser
+        // 3. DOB Parser (ดักจับรูปแบบวัน เดือน ปี พ.ศ.)
         let extractedDOB = "";
-        const dobMatch = text.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s*(\d{4})/);
+        const dobMatch = fullText.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.|[ก-๙]+)\s*(\d{4})/);
         if (dobMatch) {
           extractedDOB = `${dobMatch[1]} ${dobMatch[2]} ${dobMatch[3]}`;
         }
 
-        // 4. Address Parser (สกัดเฉพาะโครงสร้างที่อยู่จริง)
+        // 4. Address Clean Parser (ตัดตัวเลขขยะและวันออกบัตรที่ปนเข้ามาออก)
         let extractedAddress = "";
-        const lines = text.split('\n');
-        let addrParts = [];
+        const lines = fullText.split('\n');
+        let validAddressLines = [];
 
-        for (let l of lines) {
-          let cleanL = l.replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™-]/g, ' ').replace(/\s+/g, ' ').trim();
-          if (cleanL.includes("บัตรประจำตัวประชาชน") || cleanL.includes("เกิดวันที่") || cleanL.includes("ศาสนา") || cleanL.includes("วันออกบัตร") || cleanL.includes("หมดอายุ") || /\d{13}/.test(cleanL.replace(/\s/g, ''))) continue;
+        for (let line of lines) {
+          let cleanLine = line.replace(/[A-Za-z!@#$%^&*()_+=[\Click\]{};:'"<>?\\|~`«»“™-]/g, ' ').replace(/\s+/g, ' ').trim();
+          
+          // ข้ามบรรทัดส่วนหัวและวันหมดอายุ
+          if (cleanLine.includes("บัตรประจำตัวประชาชน") || cleanLine.includes("เกิดวันที่") || cleanLine.includes("ศาสนา") || cleanLine.includes("วันออกบัตร") || cleanLine.includes("หมดอายุ") || /\d{13}/.test(cleanLine.replace(/\s/g, ''))) {
+            continue;
+          }
 
-          if (cleanL.includes("ที่อยู่") || /(\d+\/\d+|\d+)/.test(cleanL) || cleanL.includes("ซอย") || cleanL.includes("ถนน") || cleanL.includes("แขวง") || cleanL.includes("เขต") || cleanL.includes("ตำบล") || cleanL.includes("อำเภอ") || cleanL.includes("จังหวัด") || cleanL.includes("กรุงเทพ")) {
-            addrParts.push(cleanL.replace(/^ที่อยู่\s*/, ''));
+          if (cleanLine.includes("ที่อยู่") || /(\d+\/\d+|\d+)/.test(cleanLine) || cleanLine.includes("ซอย") || cleanLine.includes("ถนน") || cleanLine.includes("แขวง") || cleanLine.includes("เขต") || cleanLine.includes("ตำบล") || cleanLine.includes("อำเภอ") || cleanLine.includes("จังหวัด") || cleanLine.includes("กรุงเทพ")) {
+            validAddressLines.push(cleanLine.replace(/^ที่อยู่\s*/, ''));
           }
         }
 
-        if (addrParts.length > 0) {
-          extractedAddress = addrParts.join(' ')
+        if (validAddressLines.length > 0) {
+          extractedAddress = validAddressLines.join(' ')
+            .replace(/\b\d{1,2}\s+(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*\d*\b/g, '') // ลบรูปแบบวันที่ตกค้าง
             .replace(/บางนา\s*เต้|บางนา\s*เตั/g, 'บางนาใต้')
             .replace(/ลา\s*ซาล/g, 'ลาซาล')
             .replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร')
@@ -439,6 +450,8 @@
             .replace(/\s+/g, ' ')
             .trim();
         }
+
+        await worker.terminate();
 
         fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, "สแกนภาพถ่ายจริง (Dynamic OCR)");
 
