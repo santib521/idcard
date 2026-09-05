@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V8.8 - Portrait Wide Camera</title>
+  <title>MKT Register V9.0 - Document Scan OCR</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V8.8 (Portrait + Wide Camera)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V9.0 (Document Scan OCR)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -210,6 +210,7 @@
     let activeSmartCardSession = false;
     let absentCardChecks = 0;
     let rearCameraDevices = [];
+    let ocrWorkerPromise = null;
 
     async function waitForLocalAgent(maxAttempts = 12) {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -392,6 +393,7 @@
     async function startCamera(selectedDeviceId = '') {
       try {
         if (videoStream) videoStream.getTracks().forEach(track => track.stop());
+        if (!selectedDeviceId) selectedDeviceId = localStorage.getItem('mktPreferredCameraId') || '';
         const cameraConstraints = {
           width: { ideal: 3840 }, height: { ideal: 2160 }, focusMode: { ideal: "continuous" }
         };
@@ -447,6 +449,7 @@
       const currentId = videoStream.getVideoTracks()[0].getSettings().deviceId;
       const currentIndex = rearCameraDevices.findIndex(d => d.deviceId === currentId);
       const next = rearCameraDevices[(currentIndex + 1 + rearCameraDevices.length) % rearCameraDevices.length];
+      localStorage.setItem('mktPreferredCameraId', next.deviceId);
       document.getElementById('focusText').innerText = 'กำลังสลับเลนส์...';
       await startCamera(next.deviceId);
     }
@@ -522,7 +525,7 @@
     }
 
     // ปรับภาพให้เป็นสัดส่วนบัตร 85.60 x 53.98 มม. และเพิ่ม contrast สำหรับ OCR
-    function prepareCardCanvas(sourceCanvas) {
+    function prepareCardCanvas(sourceCanvas, preserveColor = false) {
       const ratio = 1.586;
       const srcW = sourceCanvas.width;
       const srcH = sourceCanvas.height;
@@ -549,6 +552,9 @@
       outCtx.imageSmoothingEnabled = true;
       outCtx.imageSmoothingQuality = 'high';
       outCtx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height);
+
+      // Browse file ใช้ภาพสีต้นฉบับที่คมอยู่แล้ว ไม่บังคับขาวดำ/contrast จนตัวอักษรไทยหาย
+      if (preserveColor) return out;
 
       const image = outCtx.getImageData(0, 0, out.width, out.height);
       const p = image.data;
@@ -612,7 +618,8 @@
 
     function extractName(lines) {
       const title = /(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)\s*/;
-      for (const raw of lines) {
+      for (let index = 0; index < lines.length; index++) {
+        const raw = `${lines[index]} ${lines[index + 1] || ''}`;
         let line = normalizeThaiOcr(raw)
           .replace(/^(ชื่อ(?:ตัวและชื่อสกุล)?|Name)\s*[:：-]?\s*/i, '')
           .replace(/[A-Za-z0-9_.,:;()]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -621,7 +628,9 @@
         line = line.slice(match.index)
           .replace(/(เลขประจำตัว|Identification|เกิดวันที่|Date of Birth).*$/i, '')
           .trim();
-        if ((line.match(/[ก-๙]/g) || []).length >= 6) return line;
+        const thaiChars = (line.match(/[ก-๙]/g) || []).length;
+        const words = line.split(/\s+/).filter(Boolean);
+        if (thaiChars >= 6 && words.length >= 2) return line;
       }
       return '';
     }
@@ -657,7 +666,10 @@
         if (start < 0 && !/(\d+\/\d+|หมู่|ซอย|ถนน|แขวง|เขต|ตำบล|อำเภอ|จังหวัด|กรุงเทพ)/.test(line)) continue;
         line = line.replace(/^.*?ที่อยู่\s*[:：-]?\s*/, '')
           .replace(/ศาสนา\s*(พุทธ|คริสต์|อิสลาม)?/g, '')
-          .replace(/[A-Za-z_<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+          .replace(/(?:วันออกบัตร|วันบัตรหมดอายุ|Date of Issue|Date of Expiry).*$/i, '')
+          .replace(/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}.*$/, '')
+          .replace(/[A-Za-z_<>|="']/g, ' ').replace(/^[\s\-–—=]+/, '')
+          .replace(/\s+[\-–—=]+\s+/g, ' ').replace(/\s+/g, ' ').trim();
         if (line.length > 2) selected.push(line);
       }
       return selected.join(' ').replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร').replace(/\s+/g, ' ').trim();
@@ -704,6 +716,14 @@
     }
 
     // CLEAN OCR PARSER ENGINE
+    async function getOcrWorker(logger) {
+      if (!ocrWorkerPromise) {
+        ocrWorkerPromise = Tesseract.createWorker(['tha', 'eng'], 1, { logger })
+          .catch(error => { ocrWorkerPromise = null; throw error; });
+      }
+      return ocrWorkerPromise;
+    }
+
     async function processCardImage(fullCanvas, dataUrl, options = { source: 'camera' }) {
       const ocrStatus = document.getElementById('ocrStatus');
       const cardPreview = document.getElementById('cardPreview');
@@ -728,27 +748,27 @@
         if (options.source !== 'browse' && (fullCanvas.width < 900 || fullCanvas.height < 500 || sharpness < 4.5)) {
           throw new Error('IMAGE_QUALITY');
         }
-        const preparedCanvas = prepareCardCanvas(fullCanvas);
+        const preparedCanvas = prepareCardCanvas(fullCanvas, options.source === 'browse');
         const ocrDataUrl = preparedCanvas.toDataURL('image/png');
         cropFaceFromCanvas(preparedCanvas);
         progressBar.style.width = '45%';
 
-        const worker = await Tesseract.createWorker(['tha', 'eng'], 1, {
-          logger: m => {
+        const worker = await getOcrWorker(m => {
             if (m.status === 'recognizing text') {
               progressBar.style.width = `${45 + Math.round((m.progress || 0) * 35)}%`;
               statusText.innerText = `กำลังอ่านข้อความจากบัตร ${Math.round((m.progress || 0) * 100)}%`;
             }
-          }
-        });
+          });
         await worker.setParameters({
           preserve_interword_spaces: '1',
           user_defined_dpi: '300',
+          tessedit_char_whitelist: '',
           tessedit_pageseg_mode: '6'
         });
         const fullResult = await worker.recognize(ocrDataUrl);
         const fullText = fullResult.data.text || '';
         let idScanText = '';
+        let nameScanText = '';
         // อ่านแถบเลขซ้ำเฉพาะเมื่อรอบแรกยังไม่ได้เลขบัตรที่ checksum ถูกต้อง ช่วยลดเวลาสแกนทั่วไป
         if (!isValidThaiID(extractThaiID(fullText))) {
           await worker.setParameters({
@@ -760,17 +780,34 @@
           });
           idScanText = idResult.data.text || '';
         }
-        await worker.terminate();
-
+        // หากชื่อไทยยังไม่ขึ้น ให้อ่านเฉพาะแถบชื่อด้วยโมเดลไทยอีกครั้งแทนการสแกนทั้งบัตรซ้ำ
+        const firstPassLines = fullText.split('\n').map(normalizeThaiOcr).filter(Boolean);
+        if (!extractName(firstPassLines)) {
+          await worker.setParameters({
+            preserve_interword_spaces: '1',
+            tessedit_char_whitelist: '',
+            tessedit_pageseg_mode: '6'
+          });
+          const nameResult = await worker.recognize(ocrDataUrl, {
+            rectangle: {
+              left: 0,
+              top: Math.round(preparedCanvas.height * 0.18),
+              width: Math.round(preparedCanvas.width * 0.78),
+              height: Math.round(preparedCanvas.height * 0.42)
+            }
+          });
+          nameScanText = nameResult.data.text || '';
+        }
         progressBar.style.width = '88%';
         statusText.innerText = "กำลังตรวจสอบความถูกต้องของข้อมูล...";
 
-        const lines = fullText.split('\n').map(normalizeThaiOcr).filter(Boolean);
+        const combinedText = `${fullText}\n${nameScanText}`;
+        const lines = combinedText.split('\n').map(normalizeThaiOcr).filter(Boolean);
         const idDigits = extractThaiID(`${idScanText}\n${fullText}`);
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
         const extractedName = extractName(lines);
-        const extractedDOB = extractDob(fullText);
-        const extractedAddress = extractAddress(lines);
+        const extractedDOB = extractDob(combinedText);
+        const extractedAddress = extractAddress(fullText.split('\n').map(normalizeThaiOcr).filter(Boolean));
         const confidence = Math.round(fullResult.data.confidence || 0);
 
         fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null,
