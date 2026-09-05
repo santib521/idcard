@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V8.7 - 20cm Camera & Browse Restore</title>
+  <title>MKT Register V8.8 - Portrait Wide Camera</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V8.7 (20cm Camera + Browse Restore)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V8.8 (Portrait + Wide Camera)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -93,7 +93,11 @@
           </div>
 
           <div id="cameraControls" class="hidden absolute top-3 left-3 right-3 z-20 bg-black/55 rounded-lg px-3 py-2">
-            <div class="flex justify-between text-[11px] mb-1"><span id="focusText">กำลังปรับ Focus...</span><span id="zoomText">Zoom 1.0×</span></div>
+            <div class="flex justify-between items-center text-[11px] mb-1">
+              <span id="focusText">กำลังปรับ Focus...</span>
+              <button type="button" id="switchLensBtn" onclick="switchRearCamera()" class="hidden bg-white/20 px-2 py-1 rounded">สลับเลนส์</button>
+              <span id="zoomText">มุมกว้าง</span>
+            </div>
             <input id="zoomSlider" type="range" class="hidden w-full accent-teal-400" oninput="setCameraZoom(this.value)">
           </div>
 
@@ -205,6 +209,7 @@
     let agentRetryInProgress = false;
     let activeSmartCardSession = false;
     let absentCardChecks = 0;
+    let rearCameraDevices = [];
 
     async function waitForLocalAgent(maxAttempts = 12) {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -384,19 +389,26 @@
     }
 
     // CAMERA OCR
-    async function startCamera() {
+    async function startCamera(selectedDeviceId = '') {
       try {
+        if (videoStream) videoStream.getTracks().forEach(track => track.stop());
         const cameraConstraints = {
           width: { ideal: 3840 }, height: { ideal: 2160 }, focusMode: { ideal: "continuous" }
         };
-        try {
+        if (selectedDeviceId) {
           videoStream = await navigator.mediaDevices.getUserMedia({
-            video: { ...cameraConstraints, facingMode: { exact: "environment" } }
+            video: { ...cameraConstraints, deviceId: { exact: selectedDeviceId } }
           });
-        } catch (_) {
-          videoStream = await navigator.mediaDevices.getUserMedia({
-            video: { ...cameraConstraints, facingMode: { ideal: "environment" } }
-          });
+        } else {
+          try {
+            videoStream = await navigator.mediaDevices.getUserMedia({
+              video: { ...cameraConstraints, facingMode: { exact: "environment" } }
+            });
+          } catch (_) {
+            videoStream = await navigator.mediaDevices.getUserMedia({
+              video: { ...cameraConstraints, facingMode: { ideal: "environment" } }
+            });
+          }
         }
         const video = document.getElementById('webcam');
         video.srcObject = videoStream;
@@ -407,12 +419,12 @@
         const advanced = [];
         if (caps.focusMode && caps.focusMode.includes('continuous')) advanced.push({ focusMode: 'continuous' });
         if (caps.zoom) {
-          const preferredZoom = Math.min(caps.zoom.max, Math.max(caps.zoom.min, 1.0));
+          const preferredZoom = caps.zoom.min;
           advanced.push({ zoom: preferredZoom });
           const slider = document.getElementById('zoomSlider');
           slider.min = caps.zoom.min; slider.max = caps.zoom.max; slider.step = caps.zoom.step || 0.1; slider.value = preferredZoom;
           slider.classList.remove('hidden');
-          document.getElementById('zoomText').innerText = `Zoom ${Number(preferredZoom).toFixed(1)}×`;
+          document.getElementById('zoomText').innerText = `มุมกว้าง ${Number(preferredZoom).toFixed(1)}×`;
         }
         if (advanced.length) await track.applyConstraints({ advanced });
         video.classList.remove('hidden');
@@ -421,8 +433,22 @@
         document.getElementById('startState').classList.add('hidden');
         document.getElementById('cameraControls').classList.remove('hidden');
         document.getElementById('snapBtn').classList.remove('hidden');
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter(d => d.kind === 'videoinput');
+        rearCameraDevices = videoInputs.filter(d => !/(front|user|selfie|หน้า)/i.test(d.label));
+        if (!rearCameraDevices.length) rearCameraDevices = videoInputs;
+        document.getElementById('switchLensBtn').classList.toggle('hidden', rearCameraDevices.length < 2);
         setTimeout(() => { document.getElementById('focusText').innerText = 'พร้อมถ่าย • แตะภาพเพื่อ Focus'; }, 900);
       } catch (err) { alert("ไม่สามารถเปิดกล้องหลังได้ กรุณาอนุญาต Camera แล้วลองใหม่"); }
+    }
+
+    async function switchRearCamera() {
+      if (rearCameraDevices.length < 2 || !videoStream) return;
+      const currentId = videoStream.getVideoTracks()[0].getSettings().deviceId;
+      const currentIndex = rearCameraDevices.findIndex(d => d.deviceId === currentId);
+      const next = rearCameraDevices[(currentIndex + 1 + rearCameraDevices.length) % rearCameraDevices.length];
+      document.getElementById('focusText').innerText = 'กำลังสลับเลนส์...';
+      await startCamera(next.deviceId);
     }
 
     async function setCameraZoom(value) {
@@ -485,14 +511,7 @@
       await new Promise(resolve => setTimeout(resolve, 700));
       try {
         const track = videoStream && videoStream.getVideoTracks()[0];
-        if (track && 'ImageCapture' in window) {
-          const blob = await new ImageCapture(track).takePhoto();
-          const bitmap = await createImageBitmap(blob);
-          drawCardGuideCrop(bitmap, bitmap.width, bitmap.height, canvas);
-          bitmap.close();
-        } else {
-          drawCardGuideCrop(video, video.videoWidth || 1920, video.videoHeight || 1080, canvas);
-        }
+        drawCardGuideCrop(video, video.videoWidth || 1920, video.videoHeight || 1080, canvas);
       } catch (_) {
         drawCardGuideCrop(video, video.videoWidth || 1920, video.videoHeight || 1080, canvas);
       }
