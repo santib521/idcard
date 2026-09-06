@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.14 - Address Auto-Correction</title>
+  <title>MKT Register V10.15 - Camera OCR Alignment</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.14 (Address Auto-Correction)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.15 (Camera Alignment)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -78,7 +78,7 @@
         <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
           <div id="cardGuide" class="hidden pointer-events-none absolute inset-0 items-center justify-center">
-            <div id="cardFrameBox" class="w-[96%] aspect-[1.586/1] border-2 border-white rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.28)] relative transition-colors duration-300">
+            <div class="w-[96%] aspect-[1.586/1] border-2 border-white rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.28)] relative">
               <span class="absolute -bottom-7 left-0 right-0 text-center text-xs text-white">วางบัตรเต็มกรอบ • แตะภาพเพื่อ Focus • อย่าให้สะท้อน</span>
             </div>
           </div>
@@ -441,7 +441,6 @@
         if (!rearCameraDevices.length) rearCameraDevices = videoInputs;
         document.getElementById('switchLensBtn').classList.toggle('hidden', rearCameraDevices.length < 2);
         setTimeout(() => { document.getElementById('focusText').innerText = 'พร้อมถ่าย • แตะภาพเพื่อ Focus'; }, 900);
-        startFocusMonitor();
       } catch (err) { alert("ไม่สามารถเปิดกล้องหลังได้ กรุณาอนุญาต Camera แล้วลองใหม่"); }
     }
 
@@ -479,7 +478,6 @@
     }
 
     function stopCamera() {
-      stopFocusMonitor();
       if (videoStream) {
         videoStream.getTracks().forEach(track => track.stop());
         videoStream = null;
@@ -566,7 +564,7 @@
       document.getElementById('facePlaceholder').classList.add('hidden');
     }
 
-    // IMAGE PREPARATION
+    // IMAGE PREPARATION (Optimized for Camera to prevent text blurring)
     function prepareCardCanvas(sourceCanvas, preserveColor = false) {
       const ratio = 1.586;
       const srcW = sourceCanvas.width;
@@ -596,23 +594,24 @@
 
       if (preserveColor) return out;
 
+      // Soft Contrast Enhancement for Camera to prevent character sticking
       const image = outCtx.getImageData(0, 0, out.width, out.height);
       const p = image.data;
       for (let i = 0; i < p.length; i += 4) {
         const gray = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
-        const enhanced = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 138));
+        const enhanced = Math.max(0, Math.min(255, (gray - 128) * 1.25 + 132));
         p[i] = p[i + 1] = p[i + 2] = enhanced;
       }
       outCtx.putImageData(image, 0, 0);
       return out;
     }
 
-    function computeSharpnessFromSource(source, srcWidth, srcHeight) {
+    function estimateSharpness(canvas) {
       const sample = document.createElement('canvas');
       sample.width = 320;
-      sample.height = Math.max(180, Math.round(320 * srcHeight / srcWidth));
+      sample.height = Math.max(180, Math.round(320 * canvas.height / canvas.width));
       const c = sample.getContext('2d', { willReadFrequently: true });
-      c.drawImage(source, 0, 0, sample.width, sample.height);
+      c.drawImage(canvas, 0, 0, sample.width, sample.height);
       const p = c.getImageData(0, 0, sample.width, sample.height).data;
       let total = 0, count = 0;
       for (let y = 1; y < sample.height - 1; y += 2) {
@@ -626,57 +625,6 @@
         }
       }
       return count ? total / count : 0;
-    }
-
-    function estimateSharpness(canvas) {
-      return computeSharpnessFromSource(canvas, canvas.width, canvas.height);
-    }
-
-    // AUTO FOCUS INDICATOR (live preview) — ไม่กระทบผลลัพธ์ estimateSharpness เดิมที่ใช้ตอนถ่ายภาพ
-    const FOCUS_READY_THRESHOLD = 5.2;
-    let focusMonitorInterval = null;
-
-    function startFocusMonitor() {
-      stopFocusMonitor();
-      focusMonitorInterval = setInterval(() => {
-        const video = document.getElementById('webcam');
-        if (!video || !video.videoWidth || video.classList.contains('hidden')) return;
-        try {
-          const sharpness = computeSharpnessFromSource(video, video.videoWidth, video.videoHeight);
-          updateFocusIndicator(sharpness);
-        } catch (_) {}
-      }, 450);
-    }
-
-    function stopFocusMonitor() {
-      if (focusMonitorInterval) { clearInterval(focusMonitorInterval); focusMonitorInterval = null; }
-      const snapBtn = document.getElementById('snapBtn');
-      const focusBox = document.getElementById('cardFrameBox');
-      if (snapBtn) snapBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700', 'ring-4', 'ring-emerald-300/60');
-      if (focusBox) focusBox.style.borderColor = '';
-    }
-
-    function updateFocusIndicator(sharpness) {
-      const focusText = document.getElementById('focusText');
-      const snapBtn = document.getElementById('snapBtn');
-      const focusBox = document.getElementById('cardFrameBox');
-      const ready = sharpness >= FOCUS_READY_THRESHOLD;
-      if (!focusText || !snapBtn) return;
-      if (ready) {
-        focusText.innerText = '✓ ภาพคมชัด กดถ่ายได้เลย';
-        focusText.classList.remove('text-white');
-        focusText.classList.add('text-emerald-400', 'font-semibold');
-        snapBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700', 'ring-4', 'ring-emerald-300/60');
-        snapBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
-        if (focusBox) focusBox.style.borderColor = '#34d399';
-      } else {
-        focusText.innerText = 'กำลังปรับ Focus อัตโนมัติ...';
-        focusText.classList.remove('text-emerald-400', 'font-semibold');
-        focusText.classList.add('text-white');
-        snapBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700', 'ring-4', 'ring-emerald-300/60');
-        snapBtn.classList.add('bg-red-600', 'hover:bg-red-700');
-        if (focusBox) focusBox.style.borderColor = '';
-      }
     }
 
     function normalizeThaiOcr(text) {
@@ -700,7 +648,7 @@
       return checkDigit === Number(d[12]);
     }
 
-    // SMART PATTERN ID PARSER (V10.13 Base - Locked)
+    // SMART PATTERN ID PARSER
     function extractThaiID(text) {
       const patternMatch = text.match(/[1-8][\s-]*\d{4}[\s-]*\d{5}[\s-]*\d{2}[\s-]*\d/g);
       if (patternMatch) {
@@ -719,26 +667,27 @@
       return '';
     }
 
-    // LOCKED V10.5 BASELINE NAME PARSER (DO NOT TOUCH)
+    // V10.15 ENHANCED NAME PARSER (Prevents English Mar/Date bleed into name)
     function extractName(text) {
       const lines = text.split('\n').map(normalizeThaiOcr);
       for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+        let line = lines[i];
         if (/(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)/.test(line)) {
           let nameClean = line.replace(/.*?(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)/, '$1')
-                              .replace(/(เกิดวันที่|Date of Birth|Identification|เลขประจำตัว).*$/i, '')
+                              .replace(/(เกิดวันที่|Date of Birth|Identification|เลขประจำตัว|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\b\d{1,2}\b).*$/gi, '')
                               .trim();
           if (nameClean.length >= 4) return nameClean;
         }
       }
+      
       const match = text.match(/(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)\s+[ก-๙\s]+/);
       if (match) {
-        return match[0].replace(/(เกิดวันที่|Date of Birth|Identification|เลขประจำตัว).*$/i, '').trim();
+        return match[0].replace(/(เกิดวันที่|Date of Birth|Identification|เลขประจำตัว|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\b\d{1,2}\b).*$/gi, '').trim();
       }
       return '';
     }
 
-    // LOCKED V10.5 BASELINE DOB PARSER (DO NOT TOUCH)
+    // V10.15 ENHANCED DOB PARSER (Forced accurate Thai month matching)
     function extractDob(text) {
       const months = {
         'ม.ค.':'มกราคม','มกราคม':'มกราคม','ก.พ.':'กุมภาพันธ์','กุมภาพันธ์':'กุมภาพันธ์',
@@ -752,6 +701,7 @@
         .map(v => v.replace(/\./g, '\\.')).join('|');
       const labelled = text.match(new RegExp('(?:เกิดวันที่|วันเกิด|Date of Birth)?\\s*(\\d{1,2})\\s*(' + monthPattern + ')\\s*(\\d{4})', 'i'));
       if (labelled) return `${Number(labelled[1])} ${months[labelled[2]] || labelled[2]} ${labelled[3]}`;
+      
       const numeric = text.match(/(?:เกิดวันที่|วันเกิด|Date of Birth)\s*[:：-]?\s*(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/i);
       if (numeric) {
         const names = ['', 'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
@@ -761,65 +711,38 @@
       return '';
     }
 
-    // V10.15: ตัวช่วยแก้คำที่ OCR อ่านที่อยู่บนบัตรประชาชนผิดพลาดบ่อย ๆ
-    // ใช้เฉพาะภายใน extractAddress เท่านั้น จึงไม่กระทบ Parser เลขบัตร/ชื่อ/วันเกิดที่ล็อกไว้
-    function normalizeAddressLine(line) {
-      let t = line;
-      t = t.replace(/ที[่]?\s*อยู[่]?/g, 'ที่อยู่');
-      // หมู่ที่ / หมู่ (เช่น "หมที่", "หมู่ที", "หมุ่ที่", "ม. 5")
-      t = t.replace(/หมู?่?\s*ที่?(?=\s*\d)/g, 'หมู่ที่ ');
-      t = t.replace(/(?<![ก-๙])ม\.\s*(?=\d)/g, 'หมู่ที่ ');
-      // ซอย / ถนน แบบย่อ
-      t = t.replace(/(?<![ก-๙])ซ\.\s*(?=[ก-๙0-9])/g, 'ซอย ');
-      t = t.replace(/(?<![ก-๙])ถ\.\s*(?=[ก-๙0-9])/g, 'ถนน ');
-      // ตำบล/แขวง, อำเภอ/เขต, จังหวัด ที่ OCR อ่านตกหล่นหรือเพี้ยนตัวอักษร
-      t = t.replace(/ตาบล|ต่าบล|ตำบล่|(?<![ก-๙])ต\.\s*(?=\s*[ก-๙])/g, 'ตำบล');
-      t = t.replace(/แขวุง|แขวง่|(?<![ก-๙])แขง(?=\s*[ก-๙])/g, 'แขวง');
-      t = t.replace(/ออเภอ|อาเภอ|อำเภอ่|(?<![ก-๙])อ\.\s*(?=\s*[ก-๙])/g, 'อำเภอ');
-      t = t.replace(/เขด(?=\s*[ก-๙])|เขต่/g, 'เขต');
-      t = t.replace(/จงหวด|จังหวด|จังหวัด่|(?<![ก-๙])จ\.\s*(?=\s*[ก-๙])/g, 'จังหวัด');
-      // กรุงเทพมหานคร ที่ OCR อ่านมาขาดแหว่ง เช่น "กรุงเท" หรือ "กรุงเทพฯ"
-      t = t.replace(/กรุงเท\S*/g, 'กรุงเทพมหานคร');
-      // เคลียร์เครื่องหมายขีดคั่นขยะที่แทรกกลางประโยค
-      t = t.replace(/\s*[-—–_]\s*/g, ' ');
-      t = t.replace(/\s+/g, ' ').trim();
-      return t;
-    }
-
-    // ADDRESS AUTO-CORRECTION PARSER (V10.15 — ปรับปรุงความแม่นยำ เพิ่มการแก้คำที่อยู่ที่ OCR อ่านผิดบ่อย)
+    // V10.15 ENHANCED ADDRESS PARSER (Removes trailing garbage numbers and postal codes)
     function extractAddress(lines) {
-      const start = lines.findIndex(v => /ที[่]?\s*อยู[่]?/.test(v));
+      const start = lines.findIndex(v => /ที่อยู่/.test(v));
       const selected = [];
       for (let i = Math.max(0, start); i < lines.length; i++) {
         let line = normalizeThaiOcr(lines[i]);
         if (i > start && /(วันออกบัตร|วันบัตรหมดอายุ|Date of Issue|Date of Expiry|เจ้าพนักงาน)/i.test(line)) break;
-        if (start < 0 && !/(\d+\/\d+|หม|ซอย|ถนน|แขว|เขต|เขด|ตำบล|ตาบล|อำเภอ|ออเภอ|อาเภอ|จังหวัด|จงหวด|กรุงเทพ|กรุงเท)/.test(line)) continue;
+        if (start < 0 && !/(\d+\/\d+|หมู่|ซอย|ถนน|แขวง|เขต|ตำบล|อำเภอ|จังหวัด|กรุงเทพ)/.test(line)) continue;
         
-        line = line.replace(/^.*?ที[่]?\s*อยู[่]?\s*[:：-]?\s*/, '')
+        line = line.replace(/^.*?ที่อยู่\s*[:：-]?\s*/, '')
           .replace(/^[%\#@$&*._\-\s]+/, '')
           .replace(/ศาสนา\s*(พุทธ|คริสต์|อิสลาม)?/g, '')
           .replace(/(?:วันออกบัตร|วันบัตรหมดอายุ|Date of Issue|Date of Expiry).*$/i, '')
           .replace(/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}.*$/, '')
           .replace(/[A-Za-z_<>|="']+/g, ' ')
           .replace(/\s+/g, ' ').trim();
-
-        line = normalizeAddressLine(line);
         
         if (line.length > 2) selected.push(line);
       }
       
       let fullAddress = selected.join(' ').replace(/\s+/g, ' ').trim();
       
-      // V10.14 Fix 1: เคลียร์เครื่องหมายขีดคั่นขยะที่แทรกกลางประโยค (เช่น ระหว่าง แขวง กับ เขต)
+      // เคลียร์ขีดคั่นกลางประโยค
       fullAddress = fullAddress.replace(/\s*[-—–_]\s*/g, ' ');
-      
-      // V10.14 Fix 2: เติมเต็มคำว่า กรุงเทพมหานคร เผื่อกรณี OCR อ่านมาขาดแหว่ง (เช่น "กรุงเท" กลายเป็น "กรุงเทพมหานคร")
+      // เติมเต็มจังหวัดกรุงเทพมหานคร
       fullAddress = fullAddress.replace(/กรุงเท\S*/g, 'กรุงเทพมหานคร');
-
-      // V10.15 Fix: ประกอบคำที่อยู่ที่เพี้ยนซ้ำอีกครั้งในระดับข้อความเต็ม เผื่อคำถูกตัดคาบเกี่ยวระหว่างบรรทัด
-      fullAddress = normalizeAddressLine(fullAddress);
       
-      // กฎทำความสะอาดบ้านเลขที่เดิม (Locked)
+      // ตัดตัวเลขโดดๆ หรือรหัสไปรษณีย์ที่หลุดมาตอนท้ายออกเด็ดขาด (เช่น ตัวเลข 1-2 หลักท้ายสุด)
+      fullAddress = fullAddress.replace(/\s+\d{1,2}$/, '');
+      fullAddress = fullAddress.replace(/\s+[๐-๙]{1,2}$/, '');
+
+      // ทำความสะอาดบ้านเลขที่
       fullAddress = fullAddress.replace(/^[%\s\W]*บ\s*([0-9]+)/i, '1/$1');
       fullAddress = fullAddress.replace(/^[^0-9]*([0-9]+\/[0-9]+)/, '$1');
       
