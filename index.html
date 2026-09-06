@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.64 - True Close-Range Engine</title>
+  <title>MKT Register V10.65 - Full-Frame Flexible Engine</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -19,7 +19,6 @@
 
   <canvas id="cropCanvas" class="hidden"></canvas>
   <canvas id="faceCanvas" class="hidden"></canvas>
-  <canvas id="isolatedNameCanvas" class="hidden"></canvas>
 
   <!-- Header -->
   <header class="bg-teal-700 text-white p-4 shadow-md sticky top-0 z-10">
@@ -28,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.64 (True Close-Range)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.65 (Full-Frame Flexible)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -74,14 +73,13 @@
         </div>
       </div>
 
-      <!-- Mode 2: Camera View (True Close-Range 20-30 cm) -->
+      <!-- Mode 2: Camera View (Full-Frame Flexible 20-30 cm) -->
       <div id="modeCamera" class="hidden space-y-3">
         <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[240px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
           <div id="cardGuide" class="hidden pointer-events-none absolute inset-0 items-center justify-center">
-            <!-- ปรับขนาดกรอบให้กว้างถึง 95% รองรับการถือใกล้ 20-30 ซม. โดยไม่ต้องถอย -->
-            <div id="guideBox" class="w-[95%] aspect-[1.586/1] border-2 border-dashed border-teal-400 rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.35)] relative transition-all duration-300">
-              <span id="guideText" class="absolute -bottom-7 left-0 right-0 text-center text-xs text-teal-300 font-medium">ถือใกล้ 20-30 ซม. เต็มกรอบ • กดถ่ายได้เลย</span>
+            <div id="guideBox" class="w-[92%] aspect-[1.586/1] border-2 border-teal-400 rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.35)] relative transition-all duration-300">
+              <span id="guideText" class="absolute -bottom-7 left-0 right-0 text-center text-xs text-teal-300 font-medium">ถือใกล้ 20-30 ซม. ให้บัตรอยู่ในกรอบ • กดถ่ายได้ทันที</span>
             </div>
           </div>
           
@@ -91,11 +89,11 @@
               <i data-lucide="camera" class="w-5 h-5"></i>
               <span>เปิดกล้องถ่ายภาพบัตร</span>
             </button>
-            <p class="text-xs text-slate-400 mt-2">ถ่ายใกล้ 20-30 ซม. ได้ทันที ไม่ต้องถอยไกล</p>
+            <p class="text-xs text-slate-400 mt-2">ถ่ายใกล้ 20-30 ซม. ได้อิสระ ไม่ต้องถอยไกล</p>
           </div>
 
           <div id="cameraControls" class="hidden absolute top-3 left-3 right-3 z-20 bg-black/65 rounded-lg px-3 py-2 flex justify-between items-center text-[11px]">
-            <span id="focusText" class="text-teal-300 font-semibold">ระยะใกล้พร้อมถ่าย</span>
+            <span id="focusText" class="text-teal-300 font-semibold">พร้อมถ่ายระยะใกล้</span>
             <button type="button" onclick="takeSnapshot()" class="bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5">
               <i data-lucide="aperture" class="w-3.5 h-3.5"></i>
               <span>ถ่ายภาพทันที</span>
@@ -383,7 +381,7 @@
         document.getElementById('cardGuide').classList.add('flex');
         document.getElementById('startState').classList.add('hidden');
         document.getElementById('cameraControls').classList.remove('hidden');
-        document.getElementById('focusText').innerText = "ถือใกล้ 20-30 ซม. เต็มกรอบ • กดถ่ายได้เลย";
+        document.getElementById('focusText').innerText = "ถือใกล้ 20-30 ซม. • กดถ่ายได้เลย";
       } catch (err) {
         console.error("Camera open error:", err);
         alert("ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์การอนุญาตใช้กล้องในเบราว์เซอร์");
@@ -402,20 +400,7 @@
       document.getElementById('startState').classList.remove('hidden');
     }
 
-    // TRUE CLOSE-RANGE FULL FRAME CROPPER (V10.64 - รองรับระยะ 20-30 ซม. เต็มกรอบพอดี)
-    function drawCardGuideCrop(source, sourceWidth, sourceHeight, canvas) {
-      const ctx = canvas.getContext('2d');
-      const ratio = 1.586;
-      let sw = Math.floor(sourceWidth * 0.95); // ขยายขอบเขตการตัดภาพให้รองรับการ์ดเต็มจอระยะใกล้
-      let sh = Math.floor(sw / ratio);
-      if (sh > sourceHeight * 0.95) { sh = Math.floor(sourceHeight * 0.95); sw = Math.floor(sh * ratio); }
-      const sx = Math.floor((sourceWidth - sw) / 2);
-      const sy = Math.max(0, Math.floor((sourceHeight - sh) / 2));
-      canvas.width = sw;
-      canvas.height = sh;
-      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
-    }
-
+    // FULL-FRAME CAPTURE (V10.65 - บันทึกภาพเต็มเฟรม 100% ไม่ตัดขอบ ถือใกล้แค่ไหนก็รับได้หมด)
     function takeSnapshot() {
       const video = document.getElementById('webcam');
       if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
@@ -423,7 +408,11 @@
         return;
       }
       const canvas = document.getElementById('cropCanvas');
-      drawCardGuideCrop(video, video.videoWidth, video.videoHeight, canvas);
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
       stopCamera();
       processCardImage(canvas, dataUrl);
@@ -481,25 +470,6 @@
       return out;
     }
 
-    function cropIsolatedNameCanvas(fullCanvas) {
-      const w = fullCanvas.width;
-      const h = fullCanvas.height;
-      const nameCanvas = document.getElementById('isolatedNameCanvas');
-      const ctx = nameCanvas.getContext('2d', { willReadFrequently: true });
-
-      const nx = Math.floor(w * 0.05);
-      const ny = Math.floor(h * 0.15);
-      const nw = Math.floor(w * 0.90);
-      const nh = Math.floor(h * 0.35);
-
-      nameCanvas.width = nw * 2;
-      nameCanvas.height = nh * 2;
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(fullCanvas, nx, ny, nw, nh, 0, 0, nameCanvas.width, nameCanvas.height);
-      return nameCanvas;
-    }
-
     function normalizeThaiOcr(text) {
       return text
         .replace(/[|]/g, ' ')
@@ -527,8 +497,9 @@
       return '';
     }
 
-    function extractNameUltimate(text) {
-      const lines = text.split('\n').map(normalizeThaiOcr).filter(Boolean);
+    // SMART FULL-CARD NAME EXTRACTOR (V10.65 - ค้นหาคำนำหน้าและชื่อทั่วทั้งการ์ดโดยไม่พึ่งการ Crop)
+    function extractNameSmart(fullText) {
+      const lines = fullText.split('\n').map(normalizeThaiOcr).filter(Boolean);
 
       for (let line of lines) {
         let match = line.match(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง|ดร\.|พ\.ต\.|ร\.ต\.)\s*([ก-๙]{2,}\s+[ก-๙]{2,})/);
@@ -546,14 +517,6 @@
           if (cleaned.length >= 4 && /[ก-๙]/.test(cleaned)) return cleaned;
         }
       }
-
-      for (let line of lines) {
-        let thaiWords = line.match(/[ก-๙]{3,}\s+[ก-๙]{3,}/g);
-        if (thaiWords && thaiWords.length > 0 && !/(ที่อยู่|ประจำตัว|ศาสนา)/.test(line)) {
-          return `นาย ${thaiWords[0]}`.trim();
-        }
-      }
-
       return '';
     }
 
@@ -581,7 +544,7 @@
         let line = lines[i];
 
         if (foundProvince) break;
-        if (i > start && /(วันออกบัตร|วันบัตรหมดอายุ|Date of Issue|Date of Expiry|เจ้าพนักงาน|นายทะเบียน|ว\.ค\.|พ\.ศ\.|ค\.ศ\.)/i.test(line)) break;
+        if (i > start && /(วันออกบัตร|วันบัตรหมดอายุ|Date of Issue|Date of Expiry|เจ้าพนักงาน|นายทะเบียน|ว\.ค\.|พ\.ศ\.|ค\.ศ\.|บัตรประจำตัว)/i.test(line)) break;
         if (i - start > 3) break;
 
         line = line.replace(/^.*?ที่อยู่\s*[:：-]?\s*/, '')
@@ -592,7 +555,7 @@
           .replace(/[A-Za-z_<>|="']+/g, ' ')
           .replace(/\s+/g, ' ').trim();
 
-        if (line.length > 2) {
+        if (line.length > 2 && !/บัตรประจำตัว/.test(line)) {
           selected.push(line);
           if (/กรุงเทพมหานคร|จังหวัด|[จJ][ัY][งG][หH][วW][ัY][dD]|นคร|บุรี|ธานี|สงขลา|เชียงใหม่|ภูเก็ต|ชลบุรี|นนทบุรี|สมุทรปราการ|ปทุมธานี|ระยอง|ขอนแก่น|นครราชสีมา|อุบลราชธานี|อุดรธานี|นครสวรรค์|พิษณุโลก|สุราษฎร์ธานี|นครศรีธรรมราช|ตาก|ราชบุรี|กาญจนบุรี|สุพรรณบุรี|อยุธยา|พระนครศรีอยุธยา|ลพบุรี|สระบุรี|ฉะเชิงเทรา|ปราจีนบุรี|สระแก้ว|จันทบุรี|ตราด|นครนายก|สมุทรสาคร|สมุทรสงคราม|เพชรบุรี|ประจวบคีรีขันธ์|ชุมพร|ระนอง|พังงา|กระบี่|ตรัง|พัทลุง|สตูล|ปัตตานี|ยะลา|นราธิวาส|แม่ฮ่องสอน|เชียงราย|พะเยา|น่าน|แพร่|อุตรดิตถ์|ลำปาง|ลำพูน|สุโขทัย|กำแพงเพชร|พิจิตร|เพชรบูรณ์|อุทัยธานี|ชัยนาท|สิงห์บุรี|อ่างทอง/.test(line)) {
             foundProvince = true;
@@ -635,17 +598,14 @@
       progressBar.style.width = '20%';
 
       try {
-        statusText.innerText = "กำลังประมวลผลภาพถ่ายระยะใกล้ (V10.64)...";
+        statusText.innerText = "กำลังประมวลผลภาพถ่าย Full-Frame (V10.65)...";
         cropFaceFromCanvas(fullCanvas);
 
         const preparedCanvas = prepareCardCanvas(fullCanvas);
         const fullCardDataUrl = preparedCanvas.toDataURL('image/png');
 
-        const isolatedNameCanvas = cropIsolatedNameCanvas(fullCanvas);
-        const isolatedNameDataUrl = isolatedNameCanvas.toDataURL('image/png');
-
         progressBar.style.width = '40%';
-        statusText.innerText = "กำลังรัน OCR และสกัดข้อมูล...";
+        statusText.innerText = "กำลังรัน OCR วิเคราะห์ข้อมูลทั้งใบ...";
 
         const worker = await getOcrWorker(m => {
           if (m.status === 'recognizing text') {
@@ -660,12 +620,8 @@
           tessedit_pageseg_mode: '6'
         });
 
-        const [isolatedNameRes, fullCardRes] = await Promise.all([
-          worker.recognize(isolatedNameDataUrl),
-          worker.recognize(fullCardDataUrl)
-        ]);
+        const fullCardRes = await worker.recognize(fullCardDataUrl);
 
-        const extractedName = extractNameUltimate(isolatedNameRes.data.text || '');
         const fullText = fullCardRes.data.text || '';
         const lines = fullText.split('\n').map(normalizeThaiOcr).filter(Boolean);
 
@@ -673,13 +629,14 @@
         statusText.innerText = "กำลังตรวจสอบความถูกต้อง...";
 
         const idDigits = extractThaiID(fullText);
+        const extractedName = extractNameSmart(fullText);
         const extractedDOB = extractDobSmart(fullText);
         const extractedAddress = extractAddressSmart(lines);
         const confidence = Math.round(fullCardRes.data.confidence || 0);
 
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
-        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Close-Range V10.64 (${confidence}%)`);
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Full-Frame V10.65 (${confidence}%)`);
 
         progressBar.style.width = '100%';
 
