@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.59 - Smart Auto-Capture & Stability Lock</title>
+  <title>MKT Register V10.60 - Robust Camera Engine</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -20,7 +20,6 @@
   <canvas id="cropCanvas" class="hidden"></canvas>
   <canvas id="faceCanvas" class="hidden"></canvas>
   <canvas id="isolatedNameCanvas" class="hidden"></canvas>
-  <canvas id="analyzingCanvas" class="hidden"></canvas>
 
   <!-- Header -->
   <header class="bg-teal-700 text-white p-4 shadow-md sticky top-0 z-10">
@@ -29,7 +28,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.59 (Auto-Capture Lock)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.60 (Robust Camera)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -75,13 +74,13 @@
         </div>
       </div>
 
-      <!-- Mode 2: Camera View with Auto-Capture -->
+      <!-- Mode 2: Camera View -->
       <div id="modeCamera" class="hidden space-y-3">
-        <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex flex-col items-center justify-center text-white">
+        <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[220px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
           <div id="cardGuide" class="hidden pointer-events-none absolute inset-0 items-center justify-center">
             <div id="guideBox" class="w-[96%] aspect-[1.586/1] border-2 border-teal-400 rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.35)] relative transition-all duration-300">
-              <span id="guideText" class="absolute -bottom-8 left-0 right-0 text-center text-xs text-teal-300 font-medium">วางบัตรในกรอบ • ระบบจะ Auto-Lock ถ่ายให้อัตโนมัติ</span>
+              <span id="guideText" class="absolute -bottom-7 left-0 right-0 text-center text-xs text-teal-300 font-medium">วางบัตรให้อยู่ในกรอบ • แตะหน้าจอเพื่อโฟกัส</span>
             </div>
           </div>
           
@@ -89,16 +88,17 @@
             <button onclick="startCamera()"
                     class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-3 px-6 rounded-xl flex items-center justify-center gap-2 mx-auto active:scale-95 transition-all shadow-md">
               <i data-lucide="camera" class="w-5 h-5"></i>
-              <span>เปิดกล้อง Auto-Capture บัตร</span>
+              <span>เปิดกล้องถ่ายภาพบัตร</span>
             </button>
-            <p class="text-xs text-slate-400 mt-2">ระบบจะล็อกและถ่ายภาพเมื่อนิ่งคมชัดทันที</p>
+            <p class="text-xs text-slate-400 mt-2">รองรับมือถือและคอมพิวเตอร์ทุกรุ่น</p>
           </div>
 
-          <div id="cameraControls" class="hidden absolute top-3 left-3 right-3 z-20 bg-black/65 rounded-lg px-3 py-2">
-            <div class="flex justify-between items-center text-[11px] mb-1">
-              <span id="focusText" class="text-teal-300 font-semibold">กำลังล็อกโฟกัสอัตโนมัติ...</span>
-              <span id="autoStatus" class="bg-teal-600/80 text-white px-2 py-0.5 rounded text-[10px] animate-pulse">Auto-Lock Active</span>
-            </div>
+          <div id="cameraControls" class="hidden absolute top-3 left-3 right-3 z-20 bg-black/65 rounded-lg px-3 py-2 flex justify-between items-center text-[11px]">
+            <span id="focusText" class="text-teal-300 font-semibold">กล้องพร้อมใช้งาน</span>
+            <button type="button" onclick="takeSnapshot()" class="bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5">
+              <i data-lucide="aperture" class="w-3.5 h-3.5"></i>
+              <span>ถ่ายภาพทันที</span>
+            </button>
           </div>
         </div>
       </div>
@@ -210,8 +210,6 @@
     let agentRetryInProgress = false;
     let activeSmartCardSession = false;
     let absentCardChecks = 0;
-    let autoCaptureTimer = null;
-    let isCapturing = false;
     let ocrWorkerPromise = null;
 
     async function waitForLocalAgent(maxAttempts = 12) {
@@ -364,72 +362,36 @@
       }
     }
 
+    // ROBUST CAMERA INITIALIZER (V10.60 - รองรับทุกอุปกรณ์ ไร้ปัญหา Overconstrained)
     async function startCamera() {
       try {
         if (videoStream) videoStream.getTracks().forEach(track => track.stop());
-        isCapturing = false;
-        const cameraConstraints = { width: { ideal: 3840 }, height: { ideal: 2160 }, focusMode: { ideal: "continuous" } };
-        try {
-          videoStream = await navigator.mediaDevices.getUserMedia({ video: { ...cameraConstraints, facingMode: { exact: "environment" } } });
-        } catch (_) {
-          videoStream = await navigator.mediaDevices.getUserMedia({ video: { ...cameraConstraints, facingMode: { ideal: "environment" } } });
-        }
         
+        let constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } };
+        try {
+          videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (_) {
+          // Fallback ขั้นสุดท้ายสำหรับอุปกรณ์ที่จำกัดสเปกกล้อง
+          videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
+
         const video = document.getElementById('webcam');
         video.srcObject = videoStream;
         await video.play();
-
-        const track = videoStream.getVideoTracks()[0];
-        const caps = track.getCapabilities ? track.getCapabilities() : {};
-        if (caps.focusMode && caps.focusMode.includes('continuous')) {
-          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
-        }
 
         video.classList.remove('hidden');
         document.getElementById('cardGuide').classList.remove('hidden');
         document.getElementById('cardGuide').classList.add('flex');
         document.getElementById('startState').classList.add('hidden');
         document.getElementById('cameraControls').classList.remove('hidden');
-
-        // เริ่มระบบ Auto-Capture ล็อกนิ่งอัตโนมัติ (หน่วงเวลา 1.8 วินาทีให้กล้องโฟกัสแล้วกดแชะเอง)
-        startAutoCaptureSequence();
+        document.getElementById('focusText').innerText = "กล้องพร้อม • กดปุ่มแดงเพื่อถ่าย";
       } catch (err) {
-        alert("ไม่สามารถเปิดกล้องหลังได้ กรุณาอนุญาต Camera แล้วลองใหม่");
+        console.error("Camera open error:", err);
+        alert("ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์การอนุญาตใช้กล้องในเบราว์เซอร์");
       }
     }
 
-    function startAutoCaptureSequence() {
-      if (autoCaptureTimer) clearTimeout(autoCaptureTimer);
-      let countdown = 3;
-      const focusText = document.getElementById('focusText');
-      const guideBox = document.getElementById('guideBox');
-
-      guideBox.className = "w-[96%] aspect-[1.586/1] border-2 border-amber-400 rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.35)] relative transition-all duration-300";
-      focusText.innerText = "กำลังล็อกโฟกัส... ถือให้นิ่ง";
-
-      autoCaptureTimer = setTimeout(() => {
-        if (isCapturing || !videoStream) return;
-        guideBox.className = "w-[96%] aspect-[1.586/1] border-2 border-emerald-400 rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.35)] relative transition-all duration-300 scale-[1.02]";
-        focusText.innerText = "ล็อกสำเร็จ! กำลังบันทึกภาพ...";
-        triggerAutoSnapshot();
-      }, 1800);
-    }
-
-    async function triggerAutoSnapshot() {
-      if (isCapturing) return;
-      isCapturing = true;
-      const video = document.getElementById('webcam');
-      const canvas = document.getElementById('cropCanvas');
-      
-      drawCardGuideCrop(video, video.videoWidth || 1920, video.videoHeight || 1080, canvas);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-      stopCamera();
-      isCapturing = false;
-      processCardImage(canvas, dataUrl);
-    }
-
     function stopCamera() {
-      if (autoCaptureTimer) clearTimeout(autoCaptureTimer);
       if (videoStream) {
         videoStream.getTracks().forEach(track => track.stop());
         videoStream = null;
@@ -452,6 +414,19 @@
       canvas.width = sw;
       canvas.height = sh;
       ctx.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
+    }
+
+    function takeSnapshot() {
+      const video = document.getElementById('webcam');
+      if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+        alert("กล้องยังไม่พร้อม กรุณารอสักครู่แล้วลองใหม่อีกครั้ง");
+        return;
+      }
+      const canvas = document.getElementById('cropCanvas');
+      drawCardGuideCrop(video, video.videoWidth, video.videoHeight, canvas);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      stopCamera();
+      processCardImage(canvas, dataUrl);
     }
 
     function handleFileSelect(e) {
@@ -506,7 +481,6 @@
       return out;
     }
 
-    // PURE GRAYSCALE HIGH-RES CORE (V10.59 - มั่นใจความนิ่งและแม่นยำสูงสุด)
     function cropIsolatedNameCanvas(fullCanvas) {
       const w = fullCanvas.width;
       const h = fullCanvas.height;
@@ -553,7 +527,6 @@
       return '';
     }
 
-    // ULTIMATE THAI NAME MATCHER
     function extractNameUltimate(text) {
       const lines = text.split('\n').map(normalizeThaiOcr).filter(Boolean);
 
@@ -651,7 +624,7 @@
       progressBar.style.width = '20%';
 
       try {
-        statusText.innerText = "กำลังประมวลผล Auto-Capture ภาพ (V10.59)...";
+        statusText.innerText = "กำลังประมวลผล OCR (V10.60)...";
         cropFaceFromCanvas(fullCanvas);
 
         const preparedCanvas = prepareCardCanvas(fullCanvas);
@@ -661,7 +634,7 @@
         const isolatedNameDataUrl = isolatedNameCanvas.toDataURL('image/png');
 
         progressBar.style.width = '40%';
-        statusText.innerText = "กำลังรัน OCR ตรวจสอบข้อมูลความแม่นยำ...";
+        statusText.innerText = "กำลังรัน OCR และดึงข้อมูลจากภาพ...";
 
         const worker = await getOcrWorker(m => {
           if (m.status === 'recognizing text') {
@@ -695,7 +668,7 @@
 
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
-        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Auto-Capture V10.59 (${confidence}%)`);
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Robust Core V10.60 (${confidence}%)`);
 
         progressBar.style.width = '100%';
 
