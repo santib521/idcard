@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.60 - Robust Camera Engine</title>
+  <title>MKT Register V10.61 - Natural Close-Range Capture</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -28,7 +28,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.60 (Robust Camera)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.61 (Natural Close-Range)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -74,13 +74,13 @@
         </div>
       </div>
 
-      <!-- Mode 2: Camera View -->
+      <!-- Mode 2: Camera View (Natural Close-Range) -->
       <div id="modeCamera" class="hidden space-y-3">
-        <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[220px] flex flex-col items-center justify-center text-white">
+        <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[240px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
           <div id="cardGuide" class="hidden pointer-events-none absolute inset-0 items-center justify-center">
-            <div id="guideBox" class="w-[96%] aspect-[1.586/1] border-2 border-teal-400 rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.35)] relative transition-all duration-300">
-              <span id="guideText" class="absolute -bottom-7 left-0 right-0 text-center text-xs text-teal-300 font-medium">วางบัตรให้อยู่ในกรอบ • แตะหน้าจอเพื่อโฟกัส</span>
+            <div id="guideBox" class="w-[88%] aspect-[1.586/1] border-2 border-dashed border-teal-400 rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.35)] relative transition-all duration-300">
+              <span id="guideText" class="absolute -bottom-7 left-0 right-0 text-center text-xs text-teal-300 font-medium">ถือใกล้ในระยะสบายมือ (20-30 ซม.) แล้วกดถ่าย</span>
             </div>
           </div>
           
@@ -90,11 +90,11 @@
               <i data-lucide="camera" class="w-5 h-5"></i>
               <span>เปิดกล้องถ่ายภาพบัตร</span>
             </button>
-            <p class="text-xs text-slate-400 mt-2">รองรับมือถือและคอมพิวเตอร์ทุกรุ่น</p>
+            <p class="text-xs text-slate-400 mt-2">ไม่ต้องถอยไกล • ถือถ่ายใกล้ๆ ได้ทันที</p>
           </div>
 
           <div id="cameraControls" class="hidden absolute top-3 left-3 right-3 z-20 bg-black/65 rounded-lg px-3 py-2 flex justify-between items-center text-[11px]">
-            <span id="focusText" class="text-teal-300 font-semibold">กล้องพร้อมใช้งาน</span>
+            <span id="focusText" class="text-teal-300 font-semibold">พร้อมถ่ายในระยะใกล้</span>
             <button type="button" onclick="takeSnapshot()" class="bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-1.5 rounded-lg shadow active:scale-95 transition-all flex items-center gap-1.5">
               <i data-lucide="aperture" class="w-3.5 h-3.5"></i>
               <span>ถ่ายภาพทันที</span>
@@ -362,7 +362,6 @@
       }
     }
 
-    // ROBUST CAMERA INITIALIZER (V10.60 - รองรับทุกอุปกรณ์ ไร้ปัญหา Overconstrained)
     async function startCamera() {
       try {
         if (videoStream) videoStream.getTracks().forEach(track => track.stop());
@@ -371,7 +370,6 @@
         try {
           videoStream = await navigator.mediaDevices.getUserMedia(constraints);
         } catch (_) {
-          // Fallback ขั้นสุดท้ายสำหรับอุปกรณ์ที่จำกัดสเปกกล้อง
           videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
         }
 
@@ -384,7 +382,7 @@
         document.getElementById('cardGuide').classList.add('flex');
         document.getElementById('startState').classList.add('hidden');
         document.getElementById('cameraControls').classList.remove('hidden');
-        document.getElementById('focusText').innerText = "กล้องพร้อม • กดปุ่มแดงเพื่อถ่าย";
+        document.getElementById('focusText').innerText = "ถือใกล้สบายๆ • กดปุ่มแดงเพื่อถ่าย";
       } catch (err) {
         console.error("Camera open error:", err);
         alert("ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์การอนุญาตใช้กล้องในเบราว์เซอร์");
@@ -403,14 +401,15 @@
       document.getElementById('startState').classList.remove('hidden');
     }
 
+    // NATURAL CLOSE-RANGE CROPPER (V10.61 - ปลดล็อกให้ถ่ายระยะใกล้ 20-30 ซม. ได้อย่างไร้รอยต่อ)
     function drawCardGuideCrop(source, sourceWidth, sourceHeight, canvas) {
       const ctx = canvas.getContext('2d');
       const ratio = 1.586;
-      let sw = Math.floor(sourceWidth * 0.97);
+      let sw = Math.floor(sourceWidth * 0.88); // ปรับลดสัดส่วนให้รองรับการถ่ายระยะใกล้สบายๆ
       let sh = Math.floor(sw / ratio);
-      if (sh > sourceHeight * 0.96) { sh = Math.floor(sourceHeight * 0.96); sw = Math.floor(sh * ratio); }
+      if (sh > sourceHeight * 0.88) { sh = Math.floor(sourceHeight * 0.88); sw = Math.floor(sh * ratio); }
       const sx = Math.floor((sourceWidth - sw) / 2);
-      const sy = Math.max(0, Math.floor((sourceHeight - sh) / 2) - Math.floor(sh * 0.04));
+      const sy = Math.max(0, Math.floor((sourceHeight - sh) / 2));
       canvas.width = sw;
       canvas.height = sh;
       ctx.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
@@ -624,7 +623,7 @@
       progressBar.style.width = '20%';
 
       try {
-        statusText.innerText = "กำลังประมวลผล OCR (V10.60)...";
+        statusText.innerText = "กำลังประมวลผลภาพถ่ายระยะใกล้ (V10.61)...";
         cropFaceFromCanvas(fullCanvas);
 
         const preparedCanvas = prepareCardCanvas(fullCanvas);
@@ -634,7 +633,7 @@
         const isolatedNameDataUrl = isolatedNameCanvas.toDataURL('image/png');
 
         progressBar.style.width = '40%';
-        statusText.innerText = "กำลังรัน OCR และดึงข้อมูลจากภาพ...";
+        statusText.innerText = "กำลังรัน OCR และดึงข้อมูล...";
 
         const worker = await getOcrWorker(m => {
           if (m.status === 'recognizing text') {
@@ -668,7 +667,7 @@
 
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
-        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Robust Core V10.60 (${confidence}%)`);
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Close-Range V10.61 (${confidence}%)`);
 
         progressBar.style.width = '100%';
 
