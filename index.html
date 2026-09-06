@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V9.1 - Mobile Browse Color Safe OCR</title>
+  <title>MKT Register V10.0 - Agent Document Scanner</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V9.1 (Mobile + Browse Color)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.0 (Agent Document Scanner)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -84,12 +84,12 @@
           </div>
           
           <div id="startState" class="p-6 text-center">
-            <button onclick="startCamera()"
+            <button onclick="startNativeDocumentScan()"
                     class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-3 px-6 rounded-xl flex items-center justify-center gap-2 mx-auto active:scale-95 transition-all shadow-md">
               <i data-lucide="video" class="w-5 h-5"></i>
-              <span>เปิดกล้องสแกนบัตร</span>
+              <span>สแกนบัตรด้วย Agent</span>
             </button>
-            <p class="text-xs text-slate-400 mt-2">วางบัตรในกรอบ ระบบจะช่วย Focus และขยายภาพ</p>
+            <p class="text-xs text-slate-400 mt-2">ตรวจขอบ แก้เอียง และ OCR ภาษาไทยใน Tablet</p>
           </div>
 
           <div id="cameraControls" class="hidden absolute top-3 left-3 right-3 z-20 bg-black/55 rounded-lg px-3 py-2">
@@ -111,13 +111,13 @@
       <!-- Mode 3: Browse View -->
       <div id="modeBrowse" class="hidden space-y-3">
         <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
-        <button onclick="document.getElementById('fileInput').click()" 
+        <button onclick="startNativeDocumentScan()" 
                 class="w-full border-2 border-dashed border-teal-500 bg-teal-50/50 hover:bg-teal-50 text-teal-700 font-medium py-8 px-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all active:scale-[0.98]">
           <div class="w-12 h-12 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center">
             <i data-lucide="image-plus" class="w-6 h-6"></i>
           </div>
-          <span class="text-sm font-semibold">คลิกเพื่อเลือกไฟล์ภาพบัตรประชาชน</span>
-          <span class="text-xs text-slate-400">รองรับไฟล์ JPG, PNG</span>
+          <span class="text-sm font-semibold">เลือกภาพผ่าน Agent Document Scanner</span>
+          <span class="text-xs text-slate-400">เลือก Gallery แล้ว Agent จะตัดขอบและ OCR ให้</span>
         </button>
       </div>
 
@@ -211,6 +211,7 @@
     let absentCardChecks = 0;
     let rearCameraDevices = [];
     let ocrWorkerPromise = null;
+    let nativeScanResumeInProgress = false;
 
     async function waitForLocalAgent(maxAttempts = 12) {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -248,6 +249,76 @@
     document.addEventListener('visibilitychange', resumePendingCardRead);
     window.addEventListener('focus', resumePendingCardRead);
     window.addEventListener('pageshow', resumePendingCardRead);
+
+    function startNativeDocumentScan() {
+      if (!/Android/i.test(navigator.userAgent)) {
+        alert('Document Scanner รุ่นนี้รองรับ Android Tablet/มือถือผ่าน MKT SmartCard Agent V2.0');
+        return;
+      }
+      sessionStorage.setItem('mktPendingDocumentScan', '1');
+      document.getElementById('ocrStatus').classList.remove('hidden');
+      document.getElementById('statusSpinner').classList.remove('hidden');
+      document.getElementById('statusText').innerText = 'กำลังเปิด Agent Document Scanner...';
+      window.location.href = 'mkt-smartcard://scan';
+    }
+
+    async function resumeNativeDocumentScan() {
+      if (sessionStorage.getItem('mktPendingDocumentScan') !== '1') return;
+      if (document.visibilityState && document.visibilityState !== 'visible') return;
+      if (nativeScanResumeInProgress) return;
+      nativeScanResumeInProgress = true;
+      const statusText = document.getElementById('statusText');
+      const spinner = document.getElementById('statusSpinner');
+      document.getElementById('ocrStatus').classList.remove('hidden');
+      spinner.classList.remove('hidden');
+      for (let attempt = 0; attempt < 90; attempt++) {
+        try {
+          const response = await fetch('http://127.0.0.1:8181/scan-result', { cache: 'no-store' });
+          const result = await response.json();
+          if (result.status === 'pending' || result.status === 'processing') {
+            statusText.innerText = result.message || 'กำลังประมวลผล OCR ใน Tablet...';
+          } else if (result.status === 'success') {
+            sessionStorage.removeItem('mktPendingDocumentScan');
+            activeSmartCardSession = false;
+            fillFormData(result.idCard, result.fullName, result.dob, result.address,
+              result.photoBase64, `Agent Offline OCR (ความมั่นใจ ${result.confidence || 0}%)`, false);
+            if (result.cardImageBase64) {
+              document.getElementById('cardPreview').src = 'data:image/jpeg;base64,' + result.cardImageBase64;
+              document.getElementById('cardPreview').classList.remove('hidden');
+              document.getElementById('cardIcon').classList.add('hidden');
+            }
+            const missing = [];
+            if (!result.idCard) missing.push('เลขบัตร');
+            if (!result.fullName) missing.push('ชื่อ');
+            if (!result.dob) missing.push('วันเกิด');
+            if (!result.address) missing.push('ที่อยู่');
+            const badge = document.getElementById('ocrBadge');
+            badge.classList.remove('hidden');
+            badge.className = 'inline-block mt-2 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-medium';
+            badge.innerText = missing.length ? `OCR ยังขาด: ${missing.join(', ')}` : 'OCR ครบ — กรุณาตรวจสอบกับบัตร';
+            statusText.innerText = missing.length ? 'อ่านได้บางส่วน กรุณาตรวจสอบก่อนบันทึก' : 'สแกนเสร็จแล้ว กรุณาตรวจสอบข้อมูล';
+            spinner.classList.add('hidden');
+            nativeScanResumeInProgress = false;
+            return;
+          } else if (result.status === 'error') {
+            sessionStorage.removeItem('mktPendingDocumentScan');
+            statusText.innerText = result.message || 'สแกนไม่สำเร็จ';
+            spinner.classList.add('hidden');
+            nativeScanResumeInProgress = false;
+            return;
+          }
+        } catch (_) { statusText.innerText = 'กำลังรอ Agent V2.0...'; }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      sessionStorage.removeItem('mktPendingDocumentScan');
+      spinner.classList.add('hidden');
+      statusText.innerText = 'รอผลสแกนเกินเวลา กรุณาลองใหม่';
+      nativeScanResumeInProgress = false;
+    }
+
+    document.addEventListener('visibilitychange', resumeNativeDocumentScan);
+    window.addEventListener('focus', resumeNativeDocumentScan);
+    window.addEventListener('pageshow', resumeNativeDocumentScan);
 
     // ฟังก์ชันให้ Android Native App เรียกใช้ผ่าน WebView Interface Direct
     window.onAndroidSmartCardRead = function(jsonData) {
