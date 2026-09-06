@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MKT OCR Proof Lab V1</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#eef3f7;color:#172033;font-family:system-ui,"Sarabun",sans-serif}header{background:#0f766e;color:#fff;padding:18px}main{max-width:980px;margin:auto;padding:16px}.card{background:#fff;border:1px solid #d8e0e8;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 2px 8px #0001}.notice{background:#ecfdf5;border-left:5px solid #10b981}.warn{background:#fffbeb;border-left:5px solid #f59e0b}h1,h2{margin:0 0 10px}p{line-height:1.55}button,.file{display:inline-block;border:0;border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer;background:#0f766e;color:white;margin:4px}.secondary{background:#475569}.danger{background:#b91c1c}input,textarea{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:9px;font-size:15px}textarea{min-height:70px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.fields{display:grid;grid-template-columns:150px 1fr 1fr 90px;gap:8px;align-items:center}.fields b{font-size:14px}.pass{color:#047857;font-weight:700}.fail{color:#b91c1c;font-weight:700}.preview{position:relative;max-width:850px;margin:auto}.preview img{display:block;width:100%;border-radius:12px}.zone{position:absolute;border:2px solid;pointer-events:none}.z-id{left:4%;top:7%;width:66%;height:16%;border-color:#ef4444}.z-name{left:5%;top:23%;width:66%;height:22%;border-color:#2563eb}.z-dob{left:13%;top:40%;width:58%;height:18%;border-color:#a855f7}.z-address{left:3%;top:55%;width:68%;height:34%;border-color:#10b981}.legend span{margin-right:12px;font-size:13px}.progress{height:10px;background:#e2e8f0;border-radius:8px;overflow:hidden}.bar{height:100%;width:0;background:#14b8a6}.small{font-size:12px;color:#64748b}.hidden{display:none}@media(max-width:720px){.grid{grid-template-columns:1fr}.fields{grid-template-columns:100px 1fr}.fields .expected{grid-column:2}.fields .result{grid-column:2;margin-bottom:8px}}
+  </style>
+</head>
+<body>
+<header><h1>MKT OCR Proof Lab V1</h1><div>พิสูจน์ OCR ก่อน Build Android V2.1</div></header>
+<main>
+  <section class="card notice"><b>Local Processing</b><p>ภาพที่เลือกจะอ่านภายใน Browser ของเครื่องนี้ หน้าเว็บไม่มีคำสั่ง Upload และไม่บันทึกภาพลง Server แต่ครั้งแรกต้องใช้อินเทอร์เน็ตเพื่อโหลด OCR Engine และโมเดลภาษา</p></section>
+  <section class="card warn"><b>ใช้เฉพาะบัตรทดสอบหรือภาพที่ได้รับอนุญาต</b><p>เมื่อทดสอบเสร็จให้กด “ล้างภาพและข้อมูล” รายงาน CSV จะไม่มีรูปและควรใช้เลขอ้างอิงแทนเลขบัตรจริง</p></section>
+  <section class="card">
+    <h2>1. เลือกภาพหลัง Document Scanner</h2>
+    <input id="file" type="file" accept="image/jpeg,image/png">
+    <div class="grid" style="margin-top:10px"><label>รหัสภาพทดสอบ<input id="caseId" placeholder="เช่น CAM-01"></label><label>ประเภทภาพ<select id="source" style="width:100%;padding:10px;border-radius:9px;border:1px solid #cbd5e1"><option>Camera</option><option>Browse</option></select></label></div>
+    <div id="previewWrap" class="preview hidden" style="margin-top:14px"><img id="preview"><i class="zone z-id"></i><i class="zone z-name"></i><i class="zone z-dob"></i><i class="zone z-address"></i></div>
+    <div class="legend" style="margin-top:8px"><span style="color:#ef4444">■ เลขบัตร</span><span style="color:#2563eb">■ ชื่อ</span><span style="color:#a855f7">■ วันเกิด</span><span style="color:#10b981">■ ที่อยู่</span></div>
+    <button id="run" onclick="runProof()">เริ่ม OCR Proof</button><button class="danger" onclick="clearAll()">ล้างภาพและข้อมูล</button>
+    <div class="progress"><div id="bar" class="bar"></div></div><p id="status" class="small">ยังไม่ได้เริ่ม</p>
+  </section>
+  <section class="card">
+    <h2>2. ผล OCR เทียบกับข้อความบนบัตร</h2>
+    <p class="small">ช่อง “ค่าที่ถูกต้อง” ให้ผู้ทดสอบพิมพ์จากบัตรจริง ระบบจะคำนวณผ่าน/ไม่ผ่าน โดยไม่ใส่ค่าที่ถูกต้องลงในรูป</p>
+    <div class="fields">
+      <b>เลขบัตร</b><input id="actualId" readonly><input class="expected" id="expectedId" placeholder="ค่าที่ถูกต้อง"><span class="result" id="idResult">–</span>
+      <b>ชื่อไทย</b><input id="actualName" readonly><input class="expected" id="expectedName" placeholder="ค่าที่ถูกต้อง"><span class="result" id="nameResult">–</span>
+      <b>วันเกิด</b><input id="actualDob" readonly><input class="expected" id="expectedDob" placeholder="ค่าที่ถูกต้อง"><span class="result" id="dobResult">–</span>
+      <b>ที่อยู่</b><textarea id="actualAddress" readonly></textarea><textarea class="expected" id="expectedAddress" placeholder="ค่าที่ถูกต้อง"></textarea><span class="result" id="addressResult">–</span>
+    </div>
+    <button onclick="scoreAndAdd()">ประเมินและเพิ่มผลทดสอบ</button>
+  </section>
+  <section class="card"><h2>3. Raw OCR สำหรับปรับสูตร</h2><textarea id="raw" style="min-height:180px" readonly></textarea></section>
+  <section class="card"><h2>4. รายงาน</h2><p>จำนวนเคส: <b id="count">0</b></p><button class="secondary" onclick="exportCsv()">ดาวน์โหลดรายงาน CSV</button><button class="danger" onclick="clearReport()">ล้างรายงาน</button><div id="summary" class="small"></div></section>
+</main>
+<canvas id="canvas" class="hidden"></canvas>
+<script>
+let image=null, workerPromise=null, results=[];
+const zones={id:[.04,.07,.66,.16],name:[.05,.23,.66,.22],dob:[.13,.40,.58,.18],address:[.03,.55,.68,.34]};
+document.getElementById('file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const u=URL.createObjectURL(f);const img=new Image();img.onload=()=>{image=img;document.getElementById('preview').src=u;document.getElementById('previewWrap').classList.remove('hidden');document.getElementById('status').textContent=`พร้อมทดสอบ ${img.width}×${img.height}px`;};img.src=u;});
+function norm(v){return (v||'').replace(/[|_=<>]/g,' ').replace(/[“”]/g,'"').replace(/\s+/g,' ').trim()}
+function validId(v){const d=v.replace(/\D/g,'');if(d.length!==13)return false;let s=0;for(let i=0;i<12;i++)s+=+d[i]*(13-i);return((11-s%11)%10)===+d[12]}
+function parseId(t){const x=t.replace(/[OoО]/g,'0').replace(/[Il|]/g,'1');for(const m of (x.match(/(?:\d[\s-]*){13}/g)||[])){const d=m.replace(/\D/g,'');if(validId(d))return d}return''}
+function parseName(t){const clean=norm(t).replace(/[A-Za-z0-9_.,:;()]/g,' ').replace(/\s+/g,' ');const m=clean.match(/(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)\s*[ก-๙]{2,}(?:\s+[ก-๙]{2,})+/);return m?norm(m[0]):''}
+function parseDob(t){const months='มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม|ม\\.ค\\.|ก\\.พ\\.|มี\\.ค\\.|เม\\.ย\\.|พ\\.ค\\.|มิ\\.ย\\.|ก\\.ค\\.|ส\\.ค\\.|ก\\.ย\\.|ต\\.ค\\.|พ\\.ย\\.|ธ\\.ค\\.';const m=norm(t).match(new RegExp('(\\d{1,2})\\s*('+months+')\\s*(\\d{4})'));return m?`${+m[1]} ${m[2]} ${m[3]}`:''}
+function parseAddress(t){let v=norm(t).replace(/^.*?ที่อยู่\s*[:：-]?\s*/,'').replace(/(วันออกบัตร|วันบัตรหมดอายุ|Date of Issue|Date of Expiry|เจ้าพนักงาน).*$/i,'').replace(/[A-Za-z_="']/g,' ').replace(/\s+/g,' ').trim();return v.length>4?v:''}
+function cropCanvas(z){const [x,y,w,h]=z,c=document.getElementById('canvas');c.width=Math.round(image.naturalWidth*w);c.height=Math.round(image.naturalHeight*h);c.getContext('2d').drawImage(image,Math.round(image.naturalWidth*x),Math.round(image.naturalHeight*y),Math.round(image.naturalWidth*w),Math.round(image.naturalHeight*h),0,0,c.width,c.height);return c.toDataURL('image/png')}
+async function getWorker(){if(!workerPromise)workerPromise=Tesseract.createWorker(['tha','eng'],1,{logger:m=>{if(m.status==='recognizing text')document.getElementById('status').textContent=`กำลังอ่าน ${Math.round(m.progress*100)}%`;}});return workerPromise}
+async function recognizeZone(worker,key,psm){await worker.setParameters({preserve_interword_spaces:'1',user_defined_dpi:'300',tessedit_pageseg_mode:String(psm)});const r=await worker.recognize(cropCanvas(zones[key]));return r.data.text||''}
+async function runProof(){if(!image){alert('กรุณาเลือกภาพก่อน');return}document.getElementById('run').disabled=true;const bar=document.getElementById('bar');try{bar.style.width='10%';const w=await getWorker();const id=await recognizeZone(w,'id',7);bar.style.width='35%';const name=await recognizeZone(w,'name',6);bar.style.width='60%';const dob=await recognizeZone(w,'dob',6);bar.style.width='80%';const address=await recognizeZone(w,'address',6);bar.style.width='100%';document.getElementById('actualId').value=parseId(id);document.getElementById('actualName').value=parseName(name);document.getElementById('actualDob').value=parseDob(dob);document.getElementById('actualAddress').value=parseAddress(address);document.getElementById('raw').value=`[ID]\n${id}\n[NAME]\n${name}\n[DOB]\n${dob}\n[ADDRESS]\n${address}`;document.getElementById('status').textContent='OCR เสร็จแล้ว กรุณากรอกค่าที่ถูกต้องเพื่อประเมิน';}catch(e){document.getElementById('status').textContent='OCR ไม่สำเร็จ: '+e.message}finally{document.getElementById('run').disabled=false}}
+function same(a,b){return norm(a).replace(/[-\s]/g,'')===norm(b).replace(/[-\s]/g,'')}
+function mark(id,ok){const e=document.getElementById(id);e.textContent=ok?'ผ่าน':'ไม่ผ่าน';e.className='result '+(ok?'pass':'fail')}
+function scoreAndAdd(){const keys=['Id','Name','Dob','Address'];const row={caseId:document.getElementById('caseId').value||`CASE-${results.length+1}`,source:document.getElementById('source').value,time:new Date().toISOString()};for(const k of keys){const a=document.getElementById('actual'+k).value,e=document.getElementById('expected'+k).value;if(!e){alert('กรุณากรอกค่าที่ถูกต้องให้ครบ');return}row['actual'+k]=a;row['pass'+k]=same(a,e);mark(k.toLowerCase()+'Result',row['pass'+k])}results.push(row);document.getElementById('count').textContent=results.length;summary()}
+function summary(){if(!results.length){document.getElementById('summary').textContent='';return}const k=['Id','Name','Dob','Address'];document.getElementById('summary').textContent=k.map(x=>`${x}: ${Math.round(results.filter(r=>r['pass'+x]).length*100/results.length)}%`).join(' | ')}
+function csv(v){return '"'+String(v??'').replace(/"/g,'""')+'"'}
+function exportCsv(){if(!results.length){alert('ยังไม่มีผลทดสอบ');return}const h=['caseId','source','time','actualId','passId','actualName','passName','actualDob','passDob','actualAddress','passAddress'];const text='\ufeff'+[h.join(','),...results.map(r=>h.map(k=>csv(r[k])).join(','))].join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'}));a.download='MKT-OCR-Proof-Results.csv';a.click();URL.revokeObjectURL(a.href)}
+function clearAll(){image=null;document.getElementById('file').value='';document.getElementById('preview').src='';document.getElementById('previewWrap').classList.add('hidden');['actualId','actualName','actualDob','actualAddress','expectedId','expectedName','expectedDob','expectedAddress','raw'].forEach(x=>document.getElementById(x).value='');['idResult','nameResult','dobResult','addressResult'].forEach(x=>{document.getElementById(x).textContent='–';document.getElementById(x).className='result'});document.getElementById('bar').style.width='0';document.getElementById('status').textContent='ล้างภาพและข้อมูลแล้ว'}
+function clearReport(){results=[];document.getElementById('count').textContent='0';summary()}
+</script>
+</body>
+</html>
