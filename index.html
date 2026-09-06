@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.63 - Fixed Syntax & Clickable Core</title>
+  <title>MKT Register V10.64 - True Close-Range Engine</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -28,7 +28,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.63 (Fixed & Ready)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.64 (True Close-Range)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -74,13 +74,14 @@
         </div>
       </div>
 
-      <!-- Mode 2: Camera View (Close-Range 20-30 cm) -->
+      <!-- Mode 2: Camera View (True Close-Range 20-30 cm) -->
       <div id="modeCamera" class="hidden space-y-3">
         <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[240px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
           <div id="cardGuide" class="hidden pointer-events-none absolute inset-0 items-center justify-center">
-            <div id="guideBox" class="w-[85%] aspect-[1.586/1] border-2 border-dashed border-teal-400 rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.35)] relative transition-all duration-300">
-              <span id="guideText" class="absolute -bottom-7 left-0 right-0 text-center text-xs text-teal-300 font-medium">ถือใกล้ 20-30 ซม. • กรอบพอดีบัตร • กดถ่ายได้เลย</span>
+            <!-- ปรับขนาดกรอบให้กว้างถึง 95% รองรับการถือใกล้ 20-30 ซม. โดยไม่ต้องถอย -->
+            <div id="guideBox" class="w-[95%] aspect-[1.586/1] border-2 border-dashed border-teal-400 rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.35)] relative transition-all duration-300">
+              <span id="guideText" class="absolute -bottom-7 left-0 right-0 text-center text-xs text-teal-300 font-medium">ถือใกล้ 20-30 ซม. เต็มกรอบ • กดถ่ายได้เลย</span>
             </div>
           </div>
           
@@ -90,7 +91,7 @@
               <i data-lucide="camera" class="w-5 h-5"></i>
               <span>เปิดกล้องถ่ายภาพบัตร</span>
             </button>
-            <p class="text-xs text-slate-400 mt-2">ถ่ายใกล้ 20-30 ซม. ได้สบายโดยไม่ต้องถอยไกล</p>
+            <p class="text-xs text-slate-400 mt-2">ถ่ายใกล้ 20-30 ซม. ได้ทันที ไม่ต้องถอยไกล</p>
           </div>
 
           <div id="cameraControls" class="hidden absolute top-3 left-3 right-3 z-20 bg-black/65 rounded-lg px-3 py-2 flex justify-between items-center text-[11px]">
@@ -382,7 +383,7 @@
         document.getElementById('cardGuide').classList.add('flex');
         document.getElementById('startState').classList.add('hidden');
         document.getElementById('cameraControls').classList.remove('hidden');
-        document.getElementById('focusText').innerText = "ถือใกล้ 20-30 ซม. • กดถ่ายได้เลย";
+        document.getElementById('focusText').innerText = "ถือใกล้ 20-30 ซม. เต็มกรอบ • กดถ่ายได้เลย";
       } catch (err) {
         console.error("Camera open error:", err);
         alert("ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์การอนุญาตใช้กล้องในเบราว์เซอร์");
@@ -401,12 +402,13 @@
       document.getElementById('startState').classList.remove('hidden');
     }
 
+    // TRUE CLOSE-RANGE FULL FRAME CROPPER (V10.64 - รองรับระยะ 20-30 ซม. เต็มกรอบพอดี)
     function drawCardGuideCrop(source, sourceWidth, sourceHeight, canvas) {
       const ctx = canvas.getContext('2d');
       const ratio = 1.586;
-      let sw = Math.floor(sourceWidth * 0.85);
+      let sw = Math.floor(sourceWidth * 0.95); // ขยายขอบเขตการตัดภาพให้รองรับการ์ดเต็มจอระยะใกล้
       let sh = Math.floor(sw / ratio);
-      if (sh > sourceHeight * 0.85) { sh = Math.floor(sourceHeight * 0.85); sw = Math.floor(sh * ratio); }
+      if (sh > sourceHeight * 0.95) { sh = Math.floor(sourceHeight * 0.95); sw = Math.floor(sh * ratio); }
       const sx = Math.floor((sourceWidth - sw) / 2);
       const sy = Math.max(0, Math.floor((sourceHeight - sh) / 2));
       canvas.width = sw;
@@ -633,7 +635,7 @@
       progressBar.style.width = '20%';
 
       try {
-        statusText.innerText = "กำลังประมวลผลภาพถ่าย (V10.63)...";
+        statusText.innerText = "กำลังประมวลผลภาพถ่ายระยะใกล้ (V10.64)...";
         cropFaceFromCanvas(fullCanvas);
 
         const preparedCanvas = prepareCardCanvas(fullCanvas);
@@ -677,7 +679,7 @@
 
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
-        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Stable Core V10.63 (${confidence}%)`);
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Close-Range V10.64 (${confidence}%)`);
 
         progressBar.style.width = '100%';
 
