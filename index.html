@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.57 - Integral Adaptive Thresholding</title>
+  <title>MKT Register V10.58 - Pure Grayscale Stable Core</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -28,7 +28,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.57 (Adaptive Glare Guard)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.58 (Pure Grayscale Core)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -516,7 +516,7 @@
       return out;
     }
 
-    // INTEGRAL IMAGE LOCAL ADAPTIVE THRESHOLDING (V10.57 - Glare & Uneven Lighting Guard, Non-Hardcoded)
+    // PURE GRAYSCALE HIGH-RES CORE (V10.58 - ยกเลิก Binarization ดุร้าย คงความธรรมชาติของภาพให้ Tesseract อ่านง่ายที่สุด)
     function cropIsolatedNameCanvas(fullCanvas) {
       const w = fullCanvas.width;
       const h = fullCanvas.height;
@@ -528,63 +528,11 @@
       const nw = Math.floor(w * 0.90);
       const nh = Math.floor(h * 0.35);
 
-      nameCanvas.width = Math.floor(nw * 2.5);
-      nameCanvas.height = Math.floor(nh * 2.5);
+      nameCanvas.width = nw * 2;
+      nameCanvas.height = nh * 2;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(fullCanvas, nx, ny, nw, nh, 0, 0, nameCanvas.width, nameCanvas.height);
-
-      try {
-        let imgData = ctx.getImageData(0, 0, nameCanvas.width, nameCanvas.height);
-        let d = imgData.data;
-        let width = nameCanvas.width;
-        let height = nameCanvas.height;
-        
-        let gray = new Float32Array(width * height);
-        for (let i = 0, j = 0; i < d.length; i += 4, j++) {
-          gray[j] = d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
-        }
-
-        // สร้าง Integral Image เพื่อคำนวณค่าเฉลี่ยท้องถิ่น (Local Mean) แบบ O(1) ทนต่อแสงสะท้อนเฉพาะจุด
-        let integral = new Float64Array((width + 1) * (height + 1));
-        for (let y = 0; y < height; y++) {
-          let sumRow = 0;
-          for (let x = 0; x < width; x++) {
-            sumRow += gray[y * width + x];
-            integral[(y + 1) * (width + 1) + (x + 1)] = integral[y * (width + 1) + (x + 1)] + sumRow;
-          }
-        }
-
-        let S = Math.floor(Math.max(width, height) / 14); // ขนาดหน้าต่างคำนวณรอบข้าง
-        let T = 0.12; // ค่าชดเชยแสงสะท้อน (Adaptive Constant)
-
-        for (let y = 0; y < height; y++) {
-          let y1 = Math.max(0, y - S);
-          let y2 = Math.min(height - 1, y + S);
-          for (let x = 0; x < width; x++) {
-            let x1 = Math.max(0, x - S);
-            let x2 = Math.min(width - 1, x + S);
-            
-            let count = (x2 - x1 + 1) * (y2 - y1 + 1);
-            let sum = integral[(y2 + 1) * (width + 1) + (x2 + 1)] 
-                    - integral[(y1) * (width + 1) + (x2 + 1)] 
-                    - integral[(y2 + 1) * (width + 1) + (x1)] 
-                    + integral[(y1) * (width + 1) + (x1)];
-
-            let pIdx = (y * width + x) * 4;
-            let mean = sum / count;
-            
-            let val = gray[y * width + x] < mean * (1.0 - T) ? 0 : 255;
-            d[pIdx]     = val;
-            d[pIdx + 1] = val;
-            d[pIdx + 2] = val;
-          }
-        }
-        ctx.putImageData(imgData, 0, 0);
-      } catch (e) {
-        console.warn("Integral adaptive threshold fallback:", e);
-      }
-
       return nameCanvas;
     }
 
@@ -615,7 +563,7 @@
       return '';
     }
 
-    // ULTIMATE THAI NAME MATCHER (V10.57 - Non-Hardcoded)
+    // ULTIMATE THAI NAME MATCHER (V10.58)
     function extractNameUltimate(text) {
       const lines = text.split('\n').map(normalizeThaiOcr).filter(Boolean);
 
@@ -715,7 +663,7 @@
       progressBar.style.width = '20%';
 
       try {
-        statusText.innerText = "กำลังประมวลผลระบบ Adaptive Glare Guard (V10.57)...";
+        statusText.innerText = "กำลังประมวลผลระบบ Pure Grayscale (V10.58)...";
         cropFaceFromCanvas(fullCanvas);
 
         const preparedCanvas = prepareCardCanvas(fullCanvas);
@@ -725,7 +673,7 @@
         const isolatedNameDataUrl = isolatedNameCanvas.toDataURL('image/png');
 
         progressBar.style.width = '40%';
-        statusText.innerText = "กำลังรัน OCR และประมวลผลต้านแสงสะท้อน...";
+        statusText.innerText = "กำลังรัน OCR ด้วยภาพต้นฉบับธรรมชาติ...";
 
         const worker = await getOcrWorker(m => {
           if (m.status === 'recognizing text') {
@@ -759,7 +707,7 @@
 
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
-        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Glare Guard V10.57 (${confidence}%)`);
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Pure Grayscale V10.58 (${confidence}%)`);
 
         progressBar.style.width = '100%';
 
