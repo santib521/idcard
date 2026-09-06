@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.62 - Precision Close-Range Address</title>
+  <title>MKT Register V10.63 - Fixed Syntax & Clickable Core</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -28,7 +28,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.62 (Close-Range Precision)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.63 (Fixed & Ready)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -401,7 +401,6 @@
       document.getElementById('startState').classList.remove('hidden');
     }
 
-    // PRECISION CLOSE-RANGE CROPPER (V10.62 - รองรับระยะ 20-30 ซม. ได้พอดีเป๊ะ)
     function drawCardGuideCrop(source, sourceWidth, sourceHeight, canvas) {
       const ctx = canvas.getContext('2d');
       const ratio = 1.586;
@@ -462,7 +461,7 @@
       faceCtx.drawImage(fullCanvas, faceX, faceY, faceW, faceH, 0, 0, faceW, faceH);
 
       document.getElementById('facePreview').src = faceCanvas.toDataURL('image/jpeg');
-      document.getElementById('facePreview'].classList.remove('hidden');
+      document.getElementById('facePreview').classList.remove('hidden');
       document.getElementById('facePlaceholder').classList.add('hidden');
     }
 
@@ -571,7 +570,6 @@
       return '';
     }
 
-    // STRICT ADDRESS BOUNDARY & GARBAGE FILTER (V10.62 - ตัดจบส่วนล่างบัตรและขจัดขยะเมื่อถ่ายระยะใกล้)
     function extractAddressSmart(lines) {
       const start = lines.findIndex(v => /ที่อยู่/.test(v));
       const selected = [];
@@ -582,7 +580,7 @@
 
         if (foundProvince) break;
         if (i > start && /(วันออกบัตร|วันบัตรหมดอายุ|Date of Issue|Date of Expiry|เจ้าพนักงาน|นายทะเบียน|ว\.ค\.|พ\.ศ\.|ค\.ศ\.)/i.test(line)) break;
-        if (i - start > 3) break; // ที่อยู่บนบัตรประชาชนมีความยาวไม่เกิน 3บรรทัด
+        if (i - start > 3) break;
 
         line = line.replace(/^.*?ที่อยู่\s*[:：-]?\s*/, '')
           .replace(/^[%\#@$&*._\-\s]+/, '')
@@ -594,14 +592,13 @@
 
         if (line.length > 2) {
           selected.push(line);
-          if (/กรุงเทพมหานคร|จังหวัด|[จJ][ัY][งG][หH][วW][ัY][ดD]|นคร|บุรี|ธานี|สงขลา|เชียงใหม่|ภูเก็ต|ชลบุรี|นนทบุรี|สมุทรปราการ|ปทุมธานี|ระยอง|ขอนแก่น|นครราชสีมา|อุบลราชธานี|อุดรธานี|นครสวรรค์|พิษณุโลก|สุราษฎร์ธานี|นครศรีธรรมราช|ตาก|ราชบุรี|กาญจนบุรี|สุพรรณบุรี|อยุธยา|พระนครศรีอยุธยา|ลพบุรี|สระบุรี|ฉะเชิงเทรา|ปราจีนบุรี|สระแก้ว|จันทบุรี|ตราด|นครนายก|สมุทรสาคร|สมุทรสงคราม|เพชรบุรี|ประจวบคีรีขันธ์|ชุมพร|ระนอง|พังงา|กระบี่|ตรัง|พัทลุง|สตูล|ปัตตานี|ยะลา|นราธิวาส|แม่ฮ่องสอน|เชียงราย|พะเยา|น่าน|แพร่|อุตรดิตถ์|ลำปาง|ลำพูน|สุโขทัย|กำแพงเพชร|พิจิตร|เพชรบูรณ์|อุทัยธานี|ชัยนาท|สิงห์บุรี|อ่างทอง/.test(line)) {
+          if (/กรุงเทพมหานคร|จังหวัด|[จJ][ัY][งG][หH][วW][ัY][dD]|นคร|บุรี|ธานี|สงขลา|เชียงใหม่|ภูเก็ต|ชลบุรี|นนทบุรี|สมุทรปราการ|ปทุมธานี|ระยอง|ขอนแก่น|นครราชสีมา|อุบลราชธานี|อุดรธานี|นครสวรรค์|พิษณุโลก|สุราษฎร์ธานี|นครศรีธรรมราช|ตาก|ราชบุรี|กาญจนบุรี|สุพรรณบุรี|อยุธยา|พระนครศรีอยุธยา|ลพบุรี|สระบุรี|ฉะเชิงเทรา|ปราจีนบุรี|สระแก้ว|จันทบุรี|ตราด|นครนายก|สมุทรสาคร|สมุทรสงคราม|เพชรบุรี|ประจวบคีรีขันธ์|ชุมพร|ระนอง|พังงา|กระบี่|ตรัง|พัทลุง|สตูล|ปัตตานี|ยะลา|นราธิวาส|แม่ฮ่องสอน|เชียงราย|พะเยา|น่าน|แพร่|อุตรดิตถ์|ลำปาง|ลำพูน|สุโขทัย|กำแพงเพชร|พิจิตร|เพชรบูรณ์|อุทัยธานี|ชัยนาท|สิงห์บุรี|อ่างทอง/.test(line)) {
             foundProvince = true;
           }
         }
       }
 
       let fullAddress = selected.join(' ').replace(/\s+/g, ' ').trim();
-      // ตัดขยะตัวเลขวันที่หรือรหัสส่วนล่างที่อาจติดมาจากการถ่ายใกล้
       fullAddress = fullAddress.replace(/[\s\.:\-_°]+(\d{2,}|ชั้น|\d{1,2}\s+[ก-๙\.]+).*$/, '');
       fullAddress = fullAddress.replace(/\s*[-—–_]\s*/g, ' ');
       fullAddress = fullAddress.replace(/กรุงเท\S*/g, 'กรุงเทพมหานคร');
@@ -636,7 +633,7 @@
       progressBar.style.width = '20%';
 
       try {
-        statusText.innerText = "กำลังประมวลผลภาพถ่ายระยะใกล้ (V10.62)...";
+        statusText.innerText = "กำลังประมวลผลภาพถ่าย (V10.63)...";
         cropFaceFromCanvas(fullCanvas);
 
         const preparedCanvas = prepareCardCanvas(fullCanvas);
@@ -680,7 +677,7 @@
 
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
-        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Close-Range V10.62 (${confidence}%)`);
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Stable Core V10.63 (${confidence}%)`);
 
         progressBar.style.width = '100%';
 
