@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.38 - Auto-Correct Name Engine</title>
+  <title>MKT Register V10.56 - Adaptive Binarization Engine</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -28,7 +28,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.38 (Auto-Correct)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.56 (Adaptive Binarization)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -335,7 +335,7 @@
       activeSmartCardSession = false;
       clearFormInputs();
       ocrStatus.classList.remove('hidden');
-      statusSpinner.classList.remove('hidden');
+      statusSpinner.classList.add('hidden');
       progressBar.style.width = '30%';
       statusText.innerText = "กำลังตรวจสอบการเชื่อมต่อเครื่องอ่าน...";
 
@@ -516,6 +516,7 @@
       return out;
     }
 
+    // ADAPTIVE BINARIZATION ENGINE (V10.56 - ป้องกันสระบนและวรรณยุกต์กลืนกันโดยไม่ Hardcode ชื่อใดๆ)
     function cropIsolatedNameCanvas(fullCanvas) {
       const w = fullCanvas.width;
       const h = fullCanvas.height;
@@ -527,11 +528,34 @@
       const nw = Math.floor(w * 0.90);
       const nh = Math.floor(h * 0.35);
 
-      nameCanvas.width = nw * 2;
-      nameCanvas.height = nh * 2;
+      nameCanvas.width = Math.floor(nw * 2.5);
+      nameCanvas.height = Math.floor(nh * 2.5);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(fullCanvas, nx, ny, nw, nh, 0, 0, nameCanvas.width, nameCanvas.height);
+
+      // Adaptive Binarization: แยกตัวหนังสือออกจากพื้นหลังและขจัดเงารบกวน เพื่อให้ Tesseract อ่านสระบน/วรรณยุกต์ได้แม่นยำ
+      try {
+        let imgData = ctx.getImageData(0, 0, nameCanvas.width, nameCanvas.height);
+        let d = imgData.data;
+        let sum = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          sum += (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114);
+        }
+        let threshold = (sum / (d.length / 4)) * 0.88;
+
+        for (let i = 0; i < d.length; i += 4) {
+          let gray = d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
+          let val = gray < threshold ? 0 : 255;
+          d[i] = val;
+          d[i+1] = val;
+          d[i+2] = val;
+        }
+        ctx.putImageData(imgData, 0, 0);
+      } catch (e) {
+        console.warn("Adaptive threshold fallback:", e);
+      }
+
       return nameCanvas;
     }
 
@@ -562,55 +586,35 @@
       return '';
     }
 
-    // ULTIMATE THAI NAME MATCHER + AUTO CORRECTOR (V10.38)
+    // ULTIMATE THAI NAME MATCHER (V10.56)
     function extractNameUltimate(text) {
       const lines = text.split('\n').map(normalizeThaiOcr).filter(Boolean);
-      let rawName = '';
 
       for (let line of lines) {
         let match = line.match(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง|ดร\.|พ\.ต\.|ร\.ต\.)\s*([ก-๙]{2,}\s+[ก-๙]{2,})/);
         if (match) {
-          rawName = `${match[1]} ${match[2]}`.trim();
-          break;
+          return `${match[1]} ${match[2]}`.trim();
         }
       }
 
-      if (!rawName) {
-        for (let line of lines) {
-          if (/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง|ดร\.|พ\.ต\.|ร\.ต\.)/.test(line)) {
-            let cleaned = line.replace(/.*?(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง|ดร\.|พ\.ต\.|ร\.ต\.)/, '$1')
-                              .replace(/(เกิดวันที่|Date of Birth|Identification|เลขประจำตัว|Name|Last name|\b\d{1,2}\b).*$/gi, '')
-                              .replace(/[)\(\]\[}""'""-]+$/, '')
-                              .trim();
-            if (cleaned.length >= 4 && /[ก-๙]/.test(cleaned)) {
-              rawName = cleaned;
-              break;
-            }
-          }
+      for (let line of lines) {
+        if (/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง|ดร\.|พ\.ต\.|ร\.ต\.)/.test(line)) {
+          let cleaned = line.replace(/.*?(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง|ดร\.|พ\.ต\.|ร\.ต\.)/, '$1')
+                            .replace(/(เกิดวันที่|Date of Birth|Identification|เลขประจำตัว|Name|Last name|\b\d{1,2}\b).*$/gi, '')
+                            .replace(/[)\(\]\[}""'""-]+$/, '')
+                            .trim();
+          if (cleaned.length >= 4 && /[ก-๙]/.test(cleaned)) return cleaned;
         }
       }
 
-      if (!rawName) {
-        for (let line of lines) {
-          let thaiWords = line.match(/[ก-๙]{3,}\s+[ก-๙]{3,}/g);
-          if (thaiWords && thaiWords.length > 0 && !/(ที่อยู่|ประจำตัว|ศาสนา)/.test(line)) {
-            rawName = `นาย ${thaiWords[0]}`.trim();
-            break;
-          }
+      for (let line of lines) {
+        let thaiWords = line.match(/[ก-๙]{3,}\s+[ก-๙]{3,}/g);
+        if (thaiWords && thaiWords.length > 0 && !/(ที่อยู่|ประจำตัว|ศาสนา)/.test(line)) {
+          return `นาย ${thaiWords[0]}`.trim();
         }
       }
 
-      // ระบบ Smart Auto-Correct แก้ไขคำอ่านเพี้ยนบ่อยจาก OCR บัตรประชาชน
-      if (rawName) {
-        rawName = rawName
-          .replace(/สิ้นติ/g, 'สันติ')
-          .replace(/สิ่นติ/g, 'สันติ')
-          .replace(/สิ้นต/g, 'สันติ')
-          .replace(/บัวทรก/g, 'บัวทรง')
-          .replace(/บัวทซ์ง/g, 'บัวทรง');
-      }
-
-      return rawName;
+      return '';
     }
 
     function extractDobSmart(fullText) {
@@ -636,7 +640,7 @@
         if (i > start && /(วันออกบัตร|วันบัตรหมดอายุ|Date of Issue|Date of Expiry|เจ้าพนักงาน)/i.test(line)) break;
         if (start < 0 && !/(\d+\/\d+|หมู่|ซอย|ถนน|แขวง|เขต|ตำบล|อำเภอ|จังหวัด|กรุงเทพ)/.test(line)) continue;
         
-        line = line.replace(/^.*?ที่อยู่\s*[:：-]?\s*/, '')
+        line = line.replace(/^.*?[ที่อยู่]\s*[:：-]?\s*/, '')
           .replace(/^[%\#@$&*._\-\s]+/, '')
           .replace(/ศาสนา\s*(พุทธ|คริสต์|อิสลาม)?/g, '')
           .replace(/(?:วันออกบัตร|วันบัตรหมดอายุ).*$/i, '')
@@ -682,7 +686,7 @@
       progressBar.style.width = '20%';
 
       try {
-        statusText.innerText = "กำลังประมวลผลระบบ Auto-Correct (V10.38)...";
+        statusText.innerText = "กำลังประมวลผลระบบ Adaptive Binarization (V10.56)...";
         cropFaceFromCanvas(fullCanvas);
 
         const preparedCanvas = prepareCardCanvas(fullCanvas);
@@ -692,7 +696,7 @@
         const isolatedNameDataUrl = isolatedNameCanvas.toDataURL('image/png');
 
         progressBar.style.width = '40%';
-        statusText.innerText = "กำลังรัน OCR และเทียบคำผิดอัตโนมัติ...";
+        statusText.innerText = "กำลังรัน OCR และแยกแยะสระด้วยความคมชัดสูง...";
 
         const worker = await getOcrWorker(m => {
           if (m.status === 'recognizing text') {
@@ -726,7 +730,7 @@
 
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
-        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Auto-Correct V10.38 (${confidence}%)`);
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Adaptive V10.56 (${confidence}%)`);
 
         progressBar.style.width = '100%';
 
