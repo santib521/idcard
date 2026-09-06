@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.47 - Hardware Autofocus</title>
+  <title>MKT Register V10.43 - Hybrid Good Parts</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -28,7 +28,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.47 (Hardware Autofocus)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.43 (Hybrid Good Parts)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -79,7 +79,7 @@
         <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex flex-col items-center justify-center text-white">
           <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
           <div id="cardGuide" class="hidden pointer-events-none absolute inset-0 items-center justify-center">
-            <div id="cardGuideFrame" class="aspect-[1.586/1] border-2 border-white rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.28)] relative">
+            <div class="w-[96%] aspect-[1.586/1] border-2 border-white rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.28)] relative">
               <span class="absolute -bottom-7 left-0 right-0 text-center text-xs text-white">วางบัตรเต็มกรอบ • แตะภาพเพื่อ Focus • อย่าให้สะท้อน</span>
             </div>
           </div>
@@ -390,7 +390,6 @@
         await video.play();
         video.onclick = focusCamera;
         const track = videoStream.getVideoTracks()[0];
-        try { track.contentHint = 'detail'; } catch (_) {}
         const caps = track.getCapabilities ? track.getCapabilities() : {};
         const advanced = [];
         if (caps.focusMode && caps.focusMode.includes('continuous')) advanced.push({ focusMode: 'continuous' });
@@ -409,7 +408,6 @@
         document.getElementById('startState').classList.add('hidden');
         document.getElementById('cameraControls').classList.remove('hidden');
         document.getElementById('snapBtn').classList.remove('hidden');
-        requestAnimationFrame(fitCardGuideToVideo);
         setTimeout(() => { document.getElementById('focusText').innerText = 'พร้อมถ่าย • แตะภาพเพื่อ Focus'; }, 900);
       } catch (err) { alert("ไม่สามารถเปิดกล้องหลังได้ กรุณาอนุญาต Camera แล้วลองใหม่"); }
     }
@@ -441,72 +439,17 @@
       document.getElementById('startState').classList.remove('hidden');
     }
 
-    function fitCardGuideToVideo() {
-      const video = document.getElementById('webcam');
-      const guide = document.getElementById('cardGuideFrame');
-      if (!video || !guide || !video.clientWidth || !video.clientHeight) return;
-      // Keep the guide practical on a portrait phone/tablet. A 96%-wide guide
-      // is taller than a landscape camera preview and forces the user too far away.
-      const ratio = 1.586;
-      const width = Math.floor(Math.min(video.clientWidth * 0.88, video.clientHeight * 0.80 * ratio));
-      guide.style.width = `${Math.max(220, width)}px`;
-    }
-
-    window.addEventListener('resize', () => {
-      if (videoStream) fitCardGuideToVideo();
-    });
-
     function drawCardGuideCrop(source, sourceWidth, sourceHeight, canvas) {
       const ctx = canvas.getContext('2d');
       const ratio = 1.586;
-      const videoRect = source.getBoundingClientRect();
-      const guideRect = document.getElementById('cardGuideFrame').getBoundingClientRect();
-
-      // Convert the exact guide visible on screen back to native camera pixels.
-      // This makes Camera produce the same card-only input that Browse receives.
-      const scaleX = sourceWidth / Math.max(1, videoRect.width);
-      const scaleY = sourceHeight / Math.max(1, videoRect.height);
-      let sx = Math.round((guideRect.left - videoRect.left) * scaleX);
-      let sy = Math.round((guideRect.top - videoRect.top) * scaleY);
-      let sw = Math.round(guideRect.width * scaleX);
-      let sh = Math.round(guideRect.height * scaleY);
-
-      sx = Math.max(0, Math.min(sourceWidth - 1, sx));
-      sy = Math.max(0, Math.min(sourceHeight - 1, sy));
-      sw = Math.max(1, Math.min(sourceWidth - sx, sw));
-      sh = Math.max(1, Math.min(sourceHeight - sy, sh));
-
-      // Preserve the standard ID-card ratio even with browser sub-pixel rounding.
-      if (sw / sh > ratio) sw = Math.floor(sh * ratio);
-      else sh = Math.floor(sw / ratio);
+      let sw = Math.floor(sourceWidth * 0.97);
+      let sh = Math.floor(sw / ratio);
+      if (sh > sourceHeight * 0.96) { sh = Math.floor(sourceHeight * 0.96); sw = Math.floor(sh * ratio); }
+      const sx = Math.floor((sourceWidth - sw) / 2);
+      const sy = Math.max(0, Math.floor((sourceHeight - sh) / 2) - Math.floor(sh * 0.04));
       canvas.width = sw;
       canvas.height = sh;
       ctx.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
-    }
-
-    function getNormalizedGuideRect(video) {
-      const videoRect = video.getBoundingClientRect();
-      const guideRect = document.getElementById('cardGuideFrame').getBoundingClientRect();
-      return {
-        x: Math.max(0, (guideRect.left - videoRect.left) / Math.max(1, videoRect.width)),
-        y: Math.max(0, (guideRect.top - videoRect.top) / Math.max(1, videoRect.height)),
-        width: Math.min(1, guideRect.width / Math.max(1, videoRect.width)),
-        height: Math.min(1, guideRect.height / Math.max(1, videoRect.height))
-      };
-    }
-
-    function drawNormalizedGuideCrop(source, sourceWidth, sourceHeight, rect, canvas) {
-      const ratio = 1.586;
-      let sx = Math.max(0, Math.round(sourceWidth * rect.x));
-      let sy = Math.max(0, Math.round(sourceHeight * rect.y));
-      let sw = Math.min(sourceWidth - sx, Math.round(sourceWidth * rect.width));
-      let sh = Math.min(sourceHeight - sy, Math.round(sourceHeight * rect.height));
-      if (sw / sh > ratio) sw = Math.floor(sh * ratio);
-      else sh = Math.floor(sw / ratio);
-      canvas.width = Math.max(1, sw);
-      canvas.height = Math.max(1, sh);
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
     }
 
     async function takeSnapshot() {
@@ -514,32 +457,14 @@
       const canvas = document.getElementById('cropCanvas');
       const button = document.getElementById('snapBtn');
       button.disabled = true;
-      document.getElementById('focusText').innerText = 'กำลัง Auto Focus...';
-      const guideRect = getNormalizedGuideRect(video);
+      document.getElementById('focusText').innerText = 'กำลังจับภาพความละเอียดสูง...';
       await focusCamera();
-      await new Promise(resolve => setTimeout(resolve, 900));
-
-      let usedStillPhoto = false;
-      const track = videoStream && videoStream.getVideoTracks()[0];
-      if (track && 'ImageCapture' in window && 'createImageBitmap' in window) {
-        try {
-          document.getElementById('focusText').innerText = 'Focus แล้ว • กำลังถ่ายภาพนิ่งความละเอียดสูง...';
-          const photoBlob = await new ImageCapture(track).takePhoto();
-          const bitmap = await createImageBitmap(photoBlob);
-          drawNormalizedGuideCrop(bitmap, bitmap.width, bitmap.height, guideRect, canvas);
-          bitmap.close();
-          usedStillPhoto = true;
-        } catch (err) {
-          console.warn('High-resolution still capture unavailable; using focused video frame', err);
-        }
-      }
-      if (!usedStillPhoto) {
-        drawCardGuideCrop(video, video.videoWidth || 1920, video.videoHeight || 1080, canvas);
-      }
+      await new Promise(resolve => setTimeout(resolve, 700));
+      drawCardGuideCrop(video, video.videoWidth || 1920, video.videoHeight || 1080, canvas);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
       stopCamera();
       button.disabled = false;
-      processCardImage(canvas, dataUrl, 'camera');
+      processCardImage(canvas, dataUrl);
     }
 
     function handleFileSelect(e) {
@@ -554,7 +479,7 @@
           canvas.width = img.width;
           canvas.height = img.height;
           ctx.drawImage(img, 0, 0);
-          processCardImage(canvas, event.target.result, 'browse');
+          processCardImage(canvas, event.target.result);
         };
         img.src = event.target.result;
       };
@@ -614,12 +539,6 @@
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(fullCanvas, nx, ny, nw, nh, 0, 0, nameCanvas.width, nameCanvas.height);
       return enhanceOcrCanvas(nameCanvas);
-    }
-
-    function cropCameraNameBand(fullCanvas) {
-      // Wider retry band for handheld images. It covers the printed Thai-name
-      // label and full value, but cannot reach DOB or the issuing officer.
-      return enhanceOcrCanvas(cropRegionCanvas(fullCanvas, 0.12, 0.13, 0.64, 0.21, 3));
     }
 
     function enhanceOcrCanvas(sourceCanvas) {
@@ -878,7 +797,7 @@
       return ocrWorkerPromise;
     }
 
-    async function processCardImage(fullCanvas, dataUrl, inputMode = 'browse') {
+    async function processCardImage(fullCanvas, dataUrl) {
       const ocrStatus = document.getElementById('ocrStatus');
       const cardPreview = document.getElementById('cardPreview');
       const cardIcon = document.getElementById('cardIcon');
@@ -897,9 +816,7 @@
       progressBar.style.width = '20%';
 
       try {
-        statusText.innerText = inputMode === 'camera'
-          ? "กำลังเตรียมภาพจากกล้อง Autofocus (V10.47)..."
-          : "กำลังเตรียม Browse OCR ที่ผ่านการทดสอบ...";
+        statusText.innerText = "กำลังเตรียม Hybrid OCR (V10.43)...";
         cropFaceFromCanvas(fullCanvas);
 
         const preparedCanvas = prepareCardCanvas(fullCanvas);
@@ -926,8 +843,8 @@
         const fullText = fullCardRes.data.text || '';
         const fullLines = fullText.split('\n').map(normalizeThaiOcr).filter(Boolean);
         const idDigits = extractThaiID(fullText);
-        let extractedDOB = extractDobSmart(fullText);
-        let extractedAddress = extractAddressV1037(fullLines);
+        const extractedDOB = extractDobSmart(fullText);
+        const extractedAddress = extractAddressV1037(fullLines);
 
         // V10.40 path: value-only single-line crop produces the verified name.
         progressBar.style.width = '72%';
@@ -942,70 +859,15 @@
         await worker.setParameters({ tessedit_pageseg_mode: '6' });
         const narrowText = nameRes.data.text || '';
         const narrowName = extractNameUltimate(narrowText);
-        let extractedName = combineRecognizedTitle(narrowName, narrowText);
-        let fieldConfidence = nameRes.data.confidence || 0;
-
-        // Retry only inside the upper name area. Camera must never search the
-        // full card because that could select the issuing officer's name.
-        if (inputMode === 'camera' && !isCompleteThaiName(extractedName)) {
-          progressBar.style.width = '76%';
-          statusText.innerText = "กำลังอ่านชื่อซ้ำด้วยกรอบกว้าง...";
-          const wideNameCanvas = cropCameraNameBand(preparedCanvas);
-          await worker.setParameters({
-            preserve_interword_spaces: '1',
-            user_defined_dpi: '300',
-            tessedit_pageseg_mode: '6'
-          });
-          const wideNameRes = await worker.recognize(wideNameCanvas.toDataURL('image/png'));
-          const wideNameText = wideNameRes.data.text || '';
-          const wideName = combineRecognizedTitle(extractNameUltimate(wideNameText), wideNameText);
-          if (isCompleteThaiName(wideName)) extractedName = wideName;
-          fieldConfidence = Math.max(fieldConfidence, wideNameRes.data.confidence || 0);
-        } else if (inputMode !== 'camera' && !extractedName) {
-          // Browse retains the verified V10.43 fallback unchanged.
-          extractedName = combineRecognizedTitle(extractNameUltimate(fullText), narrowText);
-        }
-
-        if (inputMode === 'camera') {
-          progressBar.style.width = '78%';
-          statusText.innerText = "กำลังอ่านวันเกิดเฉพาะช่อง...";
-          const dobCanvas = enhanceOcrCanvas(cropRegionCanvas(preparedCanvas, 0.27, 0.35, 0.48, 0.20, 2));
-          await worker.setParameters({
-            preserve_interword_spaces: '1',
-            user_defined_dpi: '300',
-            tessedit_pageseg_mode: '6'
-          });
-          const dobRes = await worker.recognize(dobCanvas.toDataURL('image/png'));
-          extractedDOB = extractDobSmart(dobRes.data.text || '');
-
-          progressBar.style.width = '84%';
-          statusText.innerText = "กำลังอ่านที่อยู่เฉพาะช่อง...";
-          const addressCanvas = enhanceOcrCanvas(cropRegionCanvas(preparedCanvas, 0.04, 0.56, 0.68, 0.25, 2));
-          const addressRes = await worker.recognize(addressCanvas.toDataURL('image/png'));
-          const addressText = addressRes.data.text || '';
-          const addressLines = (`ที่อยู่ ${addressText}`).split('\n').map(normalizeThaiOcr).filter(Boolean);
-          extractedAddress = extractAddressV1037(addressLines);
-          // Camera OCR sometimes inserts visual separators and characters
-          // after the Bangkok province name. These are not address data.
-          extractedAddress = extractedAddress
-            .replace(/\s*[\/|]+\s*/g, ' ')
-            .replace(/(กรุงเทพมหานคร).*$/, '$1')
-            .replace(/\s+/g, ' ')
-            .trim();
-          fieldConfidence = ((fieldConfidence || 0) + (dobRes.data.confidence || 0) + (addressRes.data.confidence || 0)) / 3;
-        }
-        await worker.setParameters({ tessedit_pageseg_mode: '6' });
-        const confidence = Math.round(((fullCardRes.data.confidence || 0) + fieldConfidence) / 2);
+        const extractedName = combineRecognizedTitle(narrowName || extractNameUltimate(fullText), narrowText);
+        const confidence = Math.round(((fullCardRes.data.confidence || 0) + (nameRes.data.confidence || 0)) / 2);
 
         progressBar.style.width = '90%';
         statusText.innerText = "กำลังตรวจสอบความถูกต้อง...";
 
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
-        const sourceVersion = inputMode === 'camera'
-          ? `V10.47 Hardware Autofocus + Camera Field OCR (${confidence}%)`
-          : `V10.47 Browse Locked V10.43 (${confidence}%)`;
-        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, sourceVersion);
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `Hybrid V10.43: Address 10.37 + Name 10.40 (${confidence}%)`);
 
         progressBar.style.width = '100%';
 
