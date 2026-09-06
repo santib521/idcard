@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.15 - Camera OCR Alignment</title>
+  <title>MKT Register V10.16 - Dynamic Clean Parser</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -27,7 +27,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.15 (Camera Alignment)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.16 (Dynamic Clean)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -564,7 +564,7 @@
       document.getElementById('facePlaceholder').classList.add('hidden');
     }
 
-    // IMAGE PREPARATION (Optimized for Camera to prevent text blurring)
+    // IMAGE PREPARATION
     function prepareCardCanvas(sourceCanvas, preserveColor = false) {
       const ratio = 1.586;
       const srcW = sourceCanvas.width;
@@ -594,7 +594,6 @@
 
       if (preserveColor) return out;
 
-      // Soft Contrast Enhancement for Camera to prevent character sticking
       const image = outCtx.getImageData(0, 0, out.width, out.height);
       const p = image.data;
       for (let i = 0; i < p.length; i += 4) {
@@ -667,7 +666,7 @@
       return '';
     }
 
-    // V10.15 ENHANCED NAME PARSER (Prevents English Mar/Date bleed into name)
+    // V10.16 DYNAMIC CLEAN NAME PARSER (Strips trailing punctuation/brackets & English dates)
     function extractName(text) {
       const lines = text.split('\n').map(normalizeThaiOcr);
       for (let i = 0; i < lines.length; i++) {
@@ -675,6 +674,7 @@
         if (/(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)/.test(line)) {
           let nameClean = line.replace(/.*?(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)/, '$1')
                               .replace(/(เกิดวันที่|Date of Birth|Identification|เลขประจำตัว|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\b\d{1,2}\b).*$/gi, '')
+                              .replace(/[)\(\]\[}""'""-]+$/, '') // ลบวงเล็บปิดหรืออักขระขยะท้ายชื่อ
                               .trim();
           if (nameClean.length >= 4) return nameClean;
         }
@@ -682,12 +682,14 @@
       
       const match = text.match(/(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)\s+[ก-๙\s]+/);
       if (match) {
-        return match[0].replace(/(เกิดวันที่|Date of Birth|Identification|เลขประจำตัว|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\b\d{1,2}\b).*$/gi, '').trim();
+        return match[0].replace(/(เกิดวันที่|Date of Birth|Identification|เลขประจำตัว|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\b\d{1,2}\b).*$/gi, '')
+                       .replace(/[)\(\]\[}""'""-]+$/, '')
+                       .trim();
       }
       return '';
     }
 
-    // V10.15 ENHANCED DOB PARSER (Forced accurate Thai month matching)
+    // V10.16 ENHANCED DOB PARSER (Corrects month mapping dynamically)
     function extractDob(text) {
       const months = {
         'ม.ค.':'มกราคม','มกราคม':'มกราคม','ก.พ.':'กุมภาพันธ์','กุมภาพันธ์':'กุมภาพันธ์',
@@ -711,7 +713,7 @@
       return '';
     }
 
-    // V10.15 ENHANCED ADDRESS PARSER (Removes trailing garbage numbers and postal codes)
+    // V10.16 DYNAMIC CLEAN ADDRESS PARSER (Removes trailing garbage characters and isolated numbers)
     function extractAddress(lines) {
       const start = lines.findIndex(v => /ที่อยู่/.test(v));
       const selected = [];
@@ -733,14 +735,15 @@
       
       let fullAddress = selected.join(' ').replace(/\s+/g, ' ').trim();
       
-      // เคลียร์ขีดคั่นกลางประโยค
+      // ลบขีดคั่นกลางประโยค
       fullAddress = fullAddress.replace(/\s*[-—–_]\s*/g, ' ');
-      // เติมเต็มจังหวัดกรุงเทพมหานคร
+      // เติมเต็มจังหวัดกรุงเทพมหานครอัตโนมัติ
       fullAddress = fullAddress.replace(/กรุงเท\S*/g, 'กรุงเทพมหานคร');
       
-      // ตัดตัวเลขโดดๆ หรือรหัสไปรษณีย์ที่หลุดมาตอนท้ายออกเด็ดขาด (เช่น ตัวเลข 1-2 หลักท้ายสุด)
-      fullAddress = fullAddress.replace(/\s+\d{1,2}$/, '');
-      fullAddress = fullAddress.replace(/\s+[๐-๙]{1,2}$/, '');
+      // ตัดอักษรหรือตัวเลขขยะที่หลุดมาโดดๆ ตอนท้ายบรรทัดออก เช่น "7 ๓" หรือ "อ น"
+      fullAddress = fullAddress.replace(/\s+[๐-๙0-9]{1,3}\s+[๐-๙0-9]{1,3}$/, '');
+      fullAddress = fullAddress.replace(/\s+[อ-ฮ]\s+[อ-ฮ]$/, '');
+      fullAddress = fullAddress.replace(/\s+[๐-๙0-9]{1,3}$/, '');
 
       // ทำความสะอาดบ้านเลขที่
       fullAddress = fullAddress.replace(/^[%\s\W]*บ\s*([0-9]+)/i, '1/$1');
@@ -809,14 +812,10 @@
 
         const lines = fullText.split('\n').map(normalizeThaiOcr).filter(Boolean);
         const idDigits = extractThaiID(fullText);
-        let extractedName = extractName(fullText);
+        const extractedName = extractName(fullText);
         const extractedDOB = extractDob(fullText);
         const extractedAddress = extractAddress(lines);
         const confidence = Math.round(fullResult.data.confidence || 0);
-
-        if (!extractedName) {
-          extractedName = "นาย สันติ บัวทรง";
-        }
 
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
@@ -824,7 +823,7 @@
           `OCR ภาพบัตร (ความมั่นใจ ${confidence}%)`, false);
 
         const missing = [];
-        if (!idDigits) missing.push('เลขบัตร (ไม่พบ หรือ ไม่ผ่าน Checksum)');
+        if (!idDigits) missing.push('เลขบัตร (ไม่ผ่าน Checksum)');
         if (!extractedName) missing.push('ชื่อ');
         if (!extractedDOB) missing.push('วันเกิด');
         if (!extractedAddress) missing.push('ที่อยู่');
@@ -840,7 +839,7 @@
         const badge = document.getElementById('ocrBadge');
         badge.classList.remove('hidden');
         badge.className = missing.length ? 'inline-block mt-2 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-medium' : 'inline-block mt-2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-medium';
-        badge.innerText = missing.length ? 'OCR ไม่สมบูรณ์ — กรุณาตรวจสอบเลขบัตร' : 'OCR ผ่าน Checksum สำเร็จสมบูรณ์';
+        badge.innerText = missing.length ? 'OCR ไม่สมบูรณ์ — กรุณาตรวจสอบข้อมูล' : 'OCR ผ่าน Checksum สำเร็จสมบูรณ์';
 
       } catch (err) {
         console.error(err);
