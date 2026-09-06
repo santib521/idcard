@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.45 - Camera Field OCR</title>
+  <title>MKT Register V10.46 - Camera Name Retry</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -28,7 +28,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.45 (Camera Field OCR)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.46 (Camera Name Retry)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -572,6 +572,12 @@
       return enhanceOcrCanvas(nameCanvas);
     }
 
+    function cropCameraNameBand(fullCanvas) {
+      // Wider retry band for handheld images. It covers the printed Thai-name
+      // label and full value, but cannot reach DOB or the issuing officer.
+      return enhanceOcrCanvas(cropRegionCanvas(fullCanvas, 0.12, 0.13, 0.64, 0.21, 3));
+    }
+
     function enhanceOcrCanvas(sourceCanvas) {
       const out = document.createElement('canvas');
       out.width = sourceCanvas.width;
@@ -848,7 +854,7 @@
 
       try {
         statusText.innerText = inputMode === 'camera'
-          ? "กำลังเตรียมภาพจากกล้องแยกรายช่อง (V10.45)..."
+          ? "กำลังเตรียมภาพจากกล้องแยกรายช่อง (V10.46)..."
           : "กำลังเตรียม Browse OCR ที่ผ่านการทดสอบ...";
         cropFaceFromCanvas(fullCanvas);
 
@@ -892,13 +898,30 @@
         await worker.setParameters({ tessedit_pageseg_mode: '6' });
         const narrowText = nameRes.data.text || '';
         const narrowName = extractNameUltimate(narrowText);
-        // Camera must never fall back to the full card: that can select the
-        // issuing officer's name. Browse retains the verified V10.43 behavior.
-        const extractedName = inputMode === 'camera'
-          ? combineRecognizedTitle(narrowName, narrowText)
-          : combineRecognizedTitle(narrowName || extractNameUltimate(fullText), narrowText);
-
+        let extractedName = combineRecognizedTitle(narrowName, narrowText);
         let fieldConfidence = nameRes.data.confidence || 0;
+
+        // Retry only inside the upper name area. Camera must never search the
+        // full card because that could select the issuing officer's name.
+        if (inputMode === 'camera' && !isCompleteThaiName(extractedName)) {
+          progressBar.style.width = '76%';
+          statusText.innerText = "กำลังอ่านชื่อซ้ำด้วยกรอบกว้าง...";
+          const wideNameCanvas = cropCameraNameBand(preparedCanvas);
+          await worker.setParameters({
+            preserve_interword_spaces: '1',
+            user_defined_dpi: '300',
+            tessedit_pageseg_mode: '6'
+          });
+          const wideNameRes = await worker.recognize(wideNameCanvas.toDataURL('image/png'));
+          const wideNameText = wideNameRes.data.text || '';
+          const wideName = combineRecognizedTitle(extractNameUltimate(wideNameText), wideNameText);
+          if (isCompleteThaiName(wideName)) extractedName = wideName;
+          fieldConfidence = Math.max(fieldConfidence, wideNameRes.data.confidence || 0);
+        } else if (inputMode !== 'camera' && !extractedName) {
+          // Browse retains the verified V10.43 fallback unchanged.
+          extractedName = combineRecognizedTitle(extractNameUltimate(fullText), narrowText);
+        }
+
         if (inputMode === 'camera') {
           progressBar.style.width = '78%';
           statusText.innerText = "กำลังอ่านวันเกิดเฉพาะช่อง...";
@@ -936,8 +959,8 @@
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
         const sourceVersion = inputMode === 'camera'
-          ? `V10.45 Camera Field OCR (${confidence}%)`
-          : `V10.45 Browse Locked V10.43 (${confidence}%)`;
+          ? `V10.46 Camera Field OCR + Name Retry (${confidence}%)`
+          : `V10.46 Browse Locked V10.43 (${confidence}%)`;
         fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, sourceVersion);
 
         progressBar.style.width = '100%';
