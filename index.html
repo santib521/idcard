@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.46 - Camera Name Retry</title>
+  <title>MKT Register V10.47 - Hardware Autofocus</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -28,7 +28,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.46 (Camera Name Retry)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.47 (Hardware Autofocus)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -390,6 +390,7 @@
         await video.play();
         video.onclick = focusCamera;
         const track = videoStream.getVideoTracks()[0];
+        try { track.contentHint = 'detail'; } catch (_) {}
         const caps = track.getCapabilities ? track.getCapabilities() : {};
         const advanced = [];
         if (caps.focusMode && caps.focusMode.includes('continuous')) advanced.push({ focusMode: 'continuous' });
@@ -483,15 +484,58 @@
       ctx.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
     }
 
+    function getNormalizedGuideRect(video) {
+      const videoRect = video.getBoundingClientRect();
+      const guideRect = document.getElementById('cardGuideFrame').getBoundingClientRect();
+      return {
+        x: Math.max(0, (guideRect.left - videoRect.left) / Math.max(1, videoRect.width)),
+        y: Math.max(0, (guideRect.top - videoRect.top) / Math.max(1, videoRect.height)),
+        width: Math.min(1, guideRect.width / Math.max(1, videoRect.width)),
+        height: Math.min(1, guideRect.height / Math.max(1, videoRect.height))
+      };
+    }
+
+    function drawNormalizedGuideCrop(source, sourceWidth, sourceHeight, rect, canvas) {
+      const ratio = 1.586;
+      let sx = Math.max(0, Math.round(sourceWidth * rect.x));
+      let sy = Math.max(0, Math.round(sourceHeight * rect.y));
+      let sw = Math.min(sourceWidth - sx, Math.round(sourceWidth * rect.width));
+      let sh = Math.min(sourceHeight - sy, Math.round(sourceHeight * rect.height));
+      if (sw / sh > ratio) sw = Math.floor(sh * ratio);
+      else sh = Math.floor(sw / ratio);
+      canvas.width = Math.max(1, sw);
+      canvas.height = Math.max(1, sh);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    }
+
     async function takeSnapshot() {
       const video = document.getElementById('webcam');
       const canvas = document.getElementById('cropCanvas');
       const button = document.getElementById('snapBtn');
       button.disabled = true;
-      document.getElementById('focusText').innerText = 'กำลังจับภาพความละเอียดสูง...';
+      document.getElementById('focusText').innerText = 'กำลัง Auto Focus...';
+      const guideRect = getNormalizedGuideRect(video);
       await focusCamera();
-      await new Promise(resolve => setTimeout(resolve, 700));
-      drawCardGuideCrop(video, video.videoWidth || 1920, video.videoHeight || 1080, canvas);
+      await new Promise(resolve => setTimeout(resolve, 900));
+
+      let usedStillPhoto = false;
+      const track = videoStream && videoStream.getVideoTracks()[0];
+      if (track && 'ImageCapture' in window && 'createImageBitmap' in window) {
+        try {
+          document.getElementById('focusText').innerText = 'Focus แล้ว • กำลังถ่ายภาพนิ่งความละเอียดสูง...';
+          const photoBlob = await new ImageCapture(track).takePhoto();
+          const bitmap = await createImageBitmap(photoBlob);
+          drawNormalizedGuideCrop(bitmap, bitmap.width, bitmap.height, guideRect, canvas);
+          bitmap.close();
+          usedStillPhoto = true;
+        } catch (err) {
+          console.warn('High-resolution still capture unavailable; using focused video frame', err);
+        }
+      }
+      if (!usedStillPhoto) {
+        drawCardGuideCrop(video, video.videoWidth || 1920, video.videoHeight || 1080, canvas);
+      }
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
       stopCamera();
       button.disabled = false;
@@ -854,7 +898,7 @@
 
       try {
         statusText.innerText = inputMode === 'camera'
-          ? "กำลังเตรียมภาพจากกล้องแยกรายช่อง (V10.46)..."
+          ? "กำลังเตรียมภาพจากกล้อง Autofocus (V10.47)..."
           : "กำลังเตรียม Browse OCR ที่ผ่านการทดสอบ...";
         cropFaceFromCanvas(fullCanvas);
 
@@ -959,8 +1003,8 @@
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
         const sourceVersion = inputMode === 'camera'
-          ? `V10.46 Camera Field OCR + Name Retry (${confidence}%)`
-          : `V10.46 Browse Locked V10.43 (${confidence}%)`;
+          ? `V10.47 Hardware Autofocus + Camera Field OCR (${confidence}%)`
+          : `V10.47 Browse Locked V10.43 (${confidence}%)`;
         fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, sourceVersion);
 
         progressBar.style.width = '100%';
