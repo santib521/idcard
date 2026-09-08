@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.50 - Mini Floating Badge</title>
+  <title>MKT Register V10.50 - Improved Mini Floating</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -21,7 +21,7 @@
       overflow: hidden;
     }
 
-    /* กล่อง Floating หลัก ยึดตำแหน่งมุมขวาบน/ล่าง */
+    /* กล่อง Floating หลัก ยึดตำแหน่งมุมขวาล่าง */
     #mktFloatingWidget {
       position: fixed;
       bottom: 20px;
@@ -79,23 +79,24 @@
   <!-- Main Floating Widget Container -->
   <div id="mktFloatingWidget" class="mkt-mini-mode">
 
-    <!-- 1. MODE ICON จิ๋ว (ไม่บังหน้าจอ แสดงผลเป็นปุ่มไอคอนลอย) -->
-    <div id="mktMiniBar" class="hidden items-center gap-1.5 bg-teal-800 text-white p-1.5 pr-3 rounded-full shadow-2xl border-2 border-teal-400 mkt-drag-handle animate-bounce-short">
-      <!-- ปุ่มกดอ่านบัตรด่วน (ไอคอนอย่างเดียว) -->
-      <button type="button" onclick="readSmartCardHardware()" class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white p-2 rounded-full shadow transition-all flex items-center justify-center" title="กดอ่านบัตร Smart Card ทันที">
-        <i data-lucide="credit-card" class="w-5 h-5"></i>
+    <!-- 1. MODE ICON จิ๋ว (ไม่บังหน้าจอ) -->
+    <div id="mktMiniBar" class="hidden items-center gap-2 bg-teal-800 text-white p-2 pr-3 rounded-full shadow-2xl border-2 border-teal-400 mkt-drag-handle">
+      <!-- ปุ่มกดอ่านบัตรด่วนพร้อมไอคอนแสดงสถานะเมื่อกดอ่าน -->
+      <button id="btnMiniRead" type="button" onclick="readSmartCardHardware()" class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white p-2 rounded-full shadow transition-all flex items-center justify-center" title="กดอ่านบัตร Smart Card ทันที">
+        <i id="iconMiniRead" data-lucide="credit-card" class="w-5 h-5"></i>
+        <i id="iconMiniSpin" data-lucide="loader-2" class="w-5 h-5 animate-spin hidden"></i>
       </button>
 
       <!-- ปุ่มกดขยายหน้าต่างฟอร์มเต็ม -->
       <button type="button" onclick="expandWidget()" class="flex items-center gap-1.5 hover:text-teal-200 transition-colors pl-1">
         <i data-lucide="shield-check" class="w-4 h-4 text-teal-300"></i>
-        <span class="text-xs font-bold font-mono">MKT</span>
+        <span id="miniStatusText" class="text-xs font-bold font-mono">อ่านบัตร MKT</span>
         <i data-lucide="maximize-2" class="w-3.5 h-3.5 text-slate-300"></i>
       </button>
     </div>
 
 
-    <!-- 2. MODE FULL FORM (กางออกเมื่อต้องการดู/แก้ไขข้อมูล) -->
+    <!-- 2. MODE FULL FORM (กางออกเมื่ออ่านบัตรเสร็จ หรือเมื่อกดขยาย) -->
     <div id="mktFullForm" class="hidden">
       <!-- Header Bar -->
       <header id="mktHeader" class="bg-teal-700 text-white p-3 shadow-md sticky top-0 z-20 mkt-drag-handle space-y-2">
@@ -108,19 +109,20 @@
               <p class="text-[9px] text-teal-200">MKT Smart Register V10.50</p>
             </div>
           </div>
-          <div class="flex items-center gap-1.5">
-            <!-- ปุ่มย่อกลับเป็นไอคอนจิ๋ว -->
-            <button type="button" onclick="minimizeWidget()" class="bg-teal-800 hover:bg-teal-900 text-white p-1 rounded-lg transition-colors" title="ย่อเก็บเป็นไอคอนจิ๋ว">
-              <i data-lucide="minimize-2" class="w-4 h-4"></i>
-            </button>
-          </div>
+          <span class="text-[10px] bg-teal-800 border border-teal-500/30 text-teal-100 px-2 py-0.5 rounded-full font-mono">ACR39U</span>
         </div>
 
-        <!-- ปุ่มอ่านบัตรประชาชนในหน้าเต็ม -->
-        <button type="button" onclick="readSmartCardHardware()" class="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold py-2 px-3 rounded-lg shadow transition-all flex items-center justify-center gap-2 border border-emerald-400">
-          <i data-lucide="credit-card" class="w-4 h-4"></i>
-          <span>อ่านข้อมูลจากบัตร Smart Card</span>
-        </button>
+        <!-- แถบปุ่มอ่านบัตร และปุ่มย่อหน้าต่าง (Minimize) วางคู่อย่างชัดเจน ไม่สูงเกินไป -->
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="readSmartCardHardware()" class="flex-1 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold py-2 px-3 rounded-lg shadow transition-all flex items-center justify-center gap-2 border border-emerald-400">
+            <i data-lucide="credit-card" class="w-4 h-4"></i>
+            <span>อ่านข้อมูลจากบัตร Smart Card</span>
+          </button>
+          
+          <button type="button" onclick="minimizeWidget()" class="bg-teal-800 hover:bg-teal-900 text-white p-2 rounded-lg transition-colors border border-teal-600 flex items-center justify-center" title="ย่อเป็นไอคอนจิ๋ว">
+            <i data-lucide="minimize-2" class="w-4 h-4"></i>
+          </button>
+        </div>
       </header>
 
       <!-- Main Content Form -->
@@ -254,6 +256,7 @@
             <textarea id="address" rows="2" placeholder="รอข้อมูล..." class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:border-teal-500"></textarea>
           </div>
 
+          <!-- ปุ่มบันทึกการลงทะเบียน (เมื่อกดแล้วจะย่อกลับอัตโนมัติ) -->
           <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold py-2 rounded-lg shadow transition-all flex items-center justify-center gap-1.5">
             <i data-lucide="save" class="w-3.5 h-3.5"></i>
             <span>บันทึกการลงทะเบียน</span>
@@ -266,7 +269,7 @@
 
   <script>
     /* =========================================================
-     * WIDGET SWITCHER & DRAGGABLE LOGIC
+     * WIDGET CONTROLLER & DRAGGABLE LOGIC
      * ========================================================= */
     function minimizeWidget() {
       const widget = document.getElementById('mktFloatingWidget');
@@ -276,6 +279,22 @@
     function expandWidget() {
       const widget = document.getElementById('mktFloatingWidget');
       widget.className = 'mkt-full-mode';
+    }
+
+    function setMiniReadingState(isLoading) {
+      const iconCard = document.getElementById('iconMiniRead');
+      const iconSpin = document.getElementById('iconMiniSpin');
+      const textStatus = document.getElementById('miniStatusText');
+      
+      if (isLoading) {
+        iconCard.classList.add('hidden');
+        iconSpin.classList.remove('hidden');
+        textStatus.innerText = 'กำลังอ่านบัตร...';
+      } else {
+        iconSpin.classList.add('hidden');
+        iconCard.classList.remove('hidden');
+        textStatus.innerText = 'อ่านบัตร MKT';
+      }
     }
 
     function initDraggable(element, dragHandles) {
@@ -321,14 +340,13 @@
     });
 
     /* =========================================================
-     * SYSTEM ORIGINAL LOGIC V10.50 (UNTOUCHED)
+     * HARDWARE & OCR LOGIC
      * ========================================================= */
     lucide.createIcons();
     let videoStream = null;
     let agentRetryInProgress = false;
     let activeSmartCardSession = false;
     let absentCardChecks = 0;
-    let rearCameraDevices = [];
     let ocrWorkerPromise = null;
     let cameraQualityTimer = null;
     let previousQualityFrame = null;
@@ -353,7 +371,7 @@
       const status = document.getElementById('ocrStatus');
       const statusText = document.getElementById('statusText');
       status.classList.remove('hidden');
-      statusText.innerText = 'กลับจาก Agent แล้ว กำลังรออ่านบัตรอัตโนมัติ...';
+      statusText.innerText = 'กลับจาก Agent แล้ว กำลังรออ่านบัตร...';
 
       const ready = await waitForLocalAgent();
       sessionStorage.removeItem('mktPendingCardRead');
@@ -363,6 +381,7 @@
       } else {
         document.getElementById('statusSpinner').classList.add('hidden');
         statusText.innerText = 'Agent ยังไม่พร้อม';
+        setMiniReadingState(false);
       }
     }
 
@@ -374,6 +393,8 @@
       const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
       fillFormData(data.idCard, data.fullName, data.dob, data.address, data.photoBase64, "Android Native OTG SmartCard");
       startCardRemovalWatch();
+      setMiniReadingState(false);
+      expandWidget(); // กางฟอร์มออกดูข้อมูลเมื่ออ่านเสร็จ
     };
 
     function startCardRemovalWatch() {
@@ -450,6 +471,10 @@
 
       activeSmartCardSession = false;
       clearFormInputs();
+      
+      // แสดงสถานะหมุนอ่านบน Mini Bar
+      setMiniReadingState(true);
+
       ocrStatus.classList.remove('hidden');
       statusSpinner.classList.remove('hidden');
       progressBar.style.width = '30%';
@@ -474,12 +499,22 @@
         const source = /Android/i.test(navigator.userAgent) ? "MKT SmartCard Agent (Android)" : "MKT SmartCard Agent (Windows)";
         fillFormData(data.idCard, data.fullName, data.dob, data.address, data.photoBase64, source);
         startCardRemovalWatch();
+
+        // เมื่ออ่านสำเร็จ อัปเดต Status และกางฟอร์มออกดูข้อมูลทันที
+        statusSpinner.classList.add('hidden');
+        progressBar.style.width = '100%';
+        statusText.innerText = "อ่านข้อมูลจากบัตรสำเร็จ";
+        
+        setMiniReadingState(false);
+        expandWidget();
         return;
       } catch (e) {
         console.error("Local agent error", e);
         progressBar.style.width = '100%';
         statusSpinner.classList.add('hidden');
-        statusText.innerText = "ไม่พบ MKT SmartCard Agent";
+        statusText.innerText = "ไม่พบ MKT SmartCard Agent กรุณาตรวจสอบการเชื่อมต่อ";
+        setMiniReadingState(false);
+        expandWidget();
         return;
       }
     }
@@ -1014,12 +1049,6 @@
         .trim();
     }
 
-    function addressQuality(value) {
-      const clean = normalizeThaiOcr(value || '');
-      const keywordCount = (clean.match(/(หมู่|ซอย|ถนน|แขวง|เขต|ตำบล|อำเภอ|จังหวัด|กรุงเทพมหานคร)/g) || []).length;
-      return (isPlausibleThaiAddress(clean) ? 1000 : 0) + keywordCount * 100 + Math.min(clean.length, 180);
-    }
-
     function extractAddressV1037(lines) {
       const start = lines.findIndex(v => /ที่อยู่/.test(v));
       const selected = [];
@@ -1070,7 +1099,7 @@
       cardIcon.classList.add('hidden');
       cardPreview.src = dataUrl;
       cardPreview.classList.remove('hidden');
-      statusSpinner.classList.add('hidden');
+      statusSpinner.classList.remove('hidden');
       progressBar.style.width = '20%';
 
       try {
@@ -1155,28 +1184,28 @@
         await worker.setParameters({ tessedit_pageseg_mode: '6' });
         const confidence = Math.round(((fullCardRes.data.confidence || 0) + fieldConfidence) / 2);
 
-        progressBar.style.width = '90%';
+        progressBar.style.width = '100%';
+        statusSpinner.classList.add('hidden');
+
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
         fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `V10.50 (${confidence}%)`);
-
-        progressBar.style.width = '100%';
 
         const issues = [];
         if (!idDigits || !isValidThaiID(idDigits)) issues.push('เลขบัตรไม่ผ่าน Checksum');
         if (!isCompleteThaiName(extractedName)) issues.push('ชื่อไม่ครบถ้วน');
 
-        statusText.innerText = issues.length ? `ตรวจสอบ: ${issues.join(', ')}` : `สแกนข้อมูลครบถ้วน 100%`;
+        statusText.innerText = issues.length ? `ตรวจสอบ: ${issues.join(', ')}` : `สแกนข้อมูลเรียบร้อยแล้ว`;
 
         const badge = document.getElementById('ocrBadge');
         badge.classList.remove('hidden');
         badge.innerText = issues.length ? 'OCR ต้องตรวจสอบ' : 'OCR สมบูรณ์';
 
-        // เมื่ออ่านสำเร็จ ให้กางฟอร์มออกดูข้อมูลอัตโนมัติ
         expandWidget();
 
       } catch (err) {
         console.error(err);
+        statusSpinner.classList.add('hidden');
         statusText.innerText = "สแกนภาพไม่สำเร็จ";
       }
     }
@@ -1208,6 +1237,9 @@
         return;
       }
       alert("บันทึกข้อมูลการลงทะเบียนเรียบร้อยแล้ว!");
+      
+      // บันทึกเสร็จแล้ว ย่อกลับเป็นไอคอนจิ๋วอัตโนมัติ
+      minimizeWidget();
     }
 
     function clearOcrImageAndData() {
