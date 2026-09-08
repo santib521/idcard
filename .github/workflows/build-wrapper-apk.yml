@@ -1,0 +1,48 @@
+name: Build MKT HIS Wrapper APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "codex/mkt-his-wrapper-proof" ]
+    paths:
+      - "android-wrapper/**"
+      - ".github/workflows/build-wrapper-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-wrapper
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk MKT-HIS-Wrapper-Proof-0.2-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MKT-HIS-Wrapper-Proof-0.2-debug
+          path: android-wrapper/MKT-HIS-Wrapper-Proof-0.2-debug.apk
+          if-no-files-found: error
+          retention-days: 14
