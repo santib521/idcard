@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.51 - Name Color + Focus Hold</title>
+  <title>MKT Register V10.52 - Name Focused Frame</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -28,7 +28,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.51 (Name Color + Focus Hold)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.52 (Name Focused Frame)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -226,6 +226,7 @@
     let bestObservedSharpness = 0;
     let cameraQualitySamples = 0;
     let cameraReadyUntil = 0;
+    let lastBestNameFrame = null;
 
     async function waitForLocalAgent(maxAttempts = 12) {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -642,6 +643,8 @@
     async function captureBestFocusedFrame(video, outputCanvas) {
       let bestCanvas = null;
       let bestScore = -1;
+      let bestNameCanvas = null;
+      let bestNameScore = -1;
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt) await new Promise(resolve => setTimeout(resolve, 180));
         const candidate = document.createElement('canvas');
@@ -651,7 +654,14 @@
           bestScore = score;
           bestCanvas = candidate;
         }
+        const nameZone = cropRegionCanvas(candidate, 0.12, 0.13, 0.64, 0.21, 1);
+        const nameScore = estimateSharpness(nameZone);
+        if (nameScore > bestNameScore) {
+          bestNameScore = nameScore;
+          bestNameCanvas = candidate;
+        }
       }
+      lastBestNameFrame = bestNameCanvas;
       outputCanvas.width = bestCanvas.width;
       outputCanvas.height = bestCanvas.height;
       outputCanvas.getContext('2d').drawImage(bestCanvas, 0, 0);
@@ -674,6 +684,7 @@
     }
 
     function handleFileSelect(e) {
+      lastBestNameFrame = null;
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
@@ -751,35 +762,6 @@
       // Wider retry band for handheld images. It covers the printed Thai-name
       // label and full value, but cannot reach DOB or the issuing officer.
       return enhanceOcrCanvas(cropRegionCanvas(fullCanvas, 0.12, 0.13, 0.64, 0.21, 3));
-    }
-
-    function cropCameraNameBandColor(fullCanvas) {
-      // Preserve the original card colors and tiny Thai marks. The grayscale
-      // pass remains available, but it can occasionally create a false mark.
-      return cropRegionCanvas(fullCanvas, 0.12, 0.13, 0.64, 0.21, 3);
-    }
-
-    function thaiWordBase(value) {
-      return (value || '').normalize('NFC').replace(/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/g, '');
-    }
-
-    function splitThaiName(value) {
-      const match = normalizeThaiOcr(value || '').match(/^(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)\s+([ก-๙]+)\s+([ก-๙]+(?:\s+[ก-๙]+)*)$/);
-      return match ? { title: match[1], first: match[2], last: match[3] } : null;
-    }
-
-    function chooseCameraName(grayName, grayConfidence, colorName, colorConfidence) {
-      const gray = splitThaiName(grayName);
-      const color = splitThaiName(colorName);
-      if (!gray && color) return colorName;
-      if (gray && !color) return grayName;
-      if (!gray && !color) return '';
-
-      // When both passes agree except for Thai marks and have the same surname,
-      // prefer the original-color reading because it did not synthesize marks
-      // during grayscale contrast conversion.
-      if (gray.last === color.last && thaiWordBase(gray.first) === thaiWordBase(color.first)) return colorName;
-      return colorConfidence >= grayConfidence ? colorName : grayName;
     }
 
     function enhanceOcrCanvas(sourceCanvas) {
@@ -1085,7 +1067,7 @@
 
       try {
         statusText.innerText = inputMode === 'camera'
-          ? "กำลังเตรียมเฟรมที่ชัดที่สุดจากกล้อง (V10.48)..."
+          ? "กำลังเตรียมเฟรมหลักและเฟรมชื่อ (V10.52)..."
           : "กำลังเตรียม Browse OCR ที่ผ่านการทดสอบ...";
         cropFaceFromCanvas(fullCanvas);
 
@@ -1119,7 +1101,13 @@
         // V10.40 path: value-only single-line crop produces the verified name.
         progressBar.style.width = '72%';
         statusText.innerText = "กำลังอ่านชื่อด้วยกรอบบรรทัดเดียวแบบ V10.40...";
-        const nameDataUrl = cropIsolatedNameCanvas(preparedCanvas).toDataURL('image/png');
+        // ID/DOB/Address remain on the V10.50 main frame. Only Name may use
+        // the frame that scored sharpest specifically inside the name band.
+        const namePreparedCanvas = inputMode === 'camera' && lastBestNameFrame
+          ? prepareCardCanvas(lastBestNameFrame)
+          : preparedCanvas;
+        const nameDataUrl = cropIsolatedNameCanvas(namePreparedCanvas).toDataURL('image/png');
+        lastBestNameFrame = null;
         await worker.setParameters({
           preserve_interword_spaces: '1',
           user_defined_dpi: '300',
@@ -1137,7 +1125,7 @@
         if (inputMode === 'camera' && !isCompleteThaiName(extractedName)) {
           progressBar.style.width = '76%';
           statusText.innerText = "กำลังอ่านชื่อซ้ำด้วยกรอบกว้าง...";
-          const wideNameCanvas = cropCameraNameBand(preparedCanvas);
+          const wideNameCanvas = cropCameraNameBand(namePreparedCanvas);
           await worker.setParameters({
             preserve_interword_spaces: '1',
             user_defined_dpi: '300',
@@ -1154,20 +1142,6 @@
         }
 
         if (inputMode === 'camera') {
-          progressBar.style.width = '77%';
-          statusText.innerText = "กำลังยืนยันชื่อจากภาพสี...";
-          const colorNameCanvas = cropCameraNameBandColor(preparedCanvas);
-          await worker.setParameters({
-            preserve_interword_spaces: '1',
-            user_defined_dpi: '300',
-            tessedit_pageseg_mode: '6'
-          });
-          const colorNameRes = await worker.recognize(colorNameCanvas.toDataURL('image/png'));
-          const colorNameText = colorNameRes.data.text || '';
-          const colorName = combineRecognizedTitle(extractNameUltimate(colorNameText), colorNameText);
-          extractedName = chooseCameraName(extractedName, fieldConfidence, colorName, colorNameRes.data.confidence || 0);
-          fieldConfidence = Math.max(fieldConfidence, colorNameRes.data.confidence || 0);
-
           progressBar.style.width = '78%';
           statusText.innerText = "กำลังอ่านวันเกิดเฉพาะช่อง...";
           const dobCanvas = enhanceOcrCanvas(cropRegionCanvas(preparedCanvas, 0.27, 0.35, 0.48, 0.20, 2));
@@ -1225,8 +1199,8 @@
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
         const sourceVersion = inputMode === 'camera'
-          ? `V10.51 Camera Assist + Name Color Check (${confidence}%)`
-          : `V10.51 Browse Locked V10.43 (${confidence}%)`;
+          ? `V10.52 V10.50 Base + V10.48 Name Method (${confidence}%)`
+          : `V10.52 Browse Locked V10.43 (${confidence}%)`;
         fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, sourceVersion);
 
         progressBar.style.width = '100%';
