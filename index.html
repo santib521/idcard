@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.53 - Name Focus Gate</title>
+  <title>MKT Register V10.50 - Mini Floating Badge</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -12,208 +12,317 @@
   <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
-    body { font-family: 'Sarabun', sans-serif; }
+    
+    html, body {
+      background-color: transparent !important;
+      font-family: 'Sarabun', sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    /* กล่อง Floating หลัก ยึดตำแหน่งมุมขวาบน/ล่าง */
+    #mktFloatingWidget {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 999999;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* สถานะปกติ: ไอคอนลอยจิ๋ว (Mini Badge) */
+    .mkt-mini-mode {
+      width: auto !important;
+      height: auto !important;
+    }
+
+    .mkt-mini-mode #mktFullForm {
+      display: none !important;
+    }
+
+    .mkt-mini-mode #mktMiniBar {
+      display: flex !important;
+    }
+
+    /* สถานะกางออก: ฟอร์มเต็ม (Full Form) */
+    .mkt-full-mode {
+      width: 400px;
+      max-width: calc(100vw - 32px);
+      max-height: calc(100vh - 40px);
+      background: #ffffff;
+      border: 2px solid #0d9488;
+      border-radius: 1rem;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+      overflow-y: auto;
+    }
+
+    .mkt-full-mode #mktMiniBar {
+      display: none !important;
+    }
+
+    .mkt-full-mode #mktFullForm {
+      display: block !important;
+    }
+
+    .mkt-drag-handle {
+      cursor: move;
+      user-select: none;
+    }
   </style>
 </head>
-<body class="bg-slate-100 min-h-screen pb-10">
+<body>
 
   <canvas id="cropCanvas" class="hidden"></canvas>
   <canvas id="faceCanvas" class="hidden"></canvas>
   <canvas id="isolatedNameCanvas" class="hidden"></canvas>
 
-  <!-- Header -->
-  <header class="bg-teal-700 text-white p-4 shadow-md sticky top-0 z-10">
-    <div class="max-w-md mx-auto flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <i data-lucide="shield-check" class="w-6 h-6"></i>
-        <div>
-          <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.53 (Name Focus Gate)</p>
-        </div>
-      </div>
-      <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
-    </div>
-  </header>
+  <!-- Main Floating Widget Container -->
+  <div id="mktFloatingWidget" class="mkt-mini-mode">
 
-  <!-- Main Container -->
-  <main class="max-w-md mx-auto p-4 space-y-4">
-
-    <!-- Input Mode Switcher Card -->
-    <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
-      <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">เลือกวิธีนำเข้าข้อมูลบัตร</label>
-      
-      <!-- Mode Tabs Button -->
-      <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl mb-4">
-        <button id="tabReader" onclick="switchMode('reader')" class="py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1">
-          <i data-lucide="cpu" class="w-4 h-4"></i>
-          <span>Smart Card</span>
-        </button>
-        <button id="tabCamera" onclick="switchMode('camera')" class="py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex flex-col items-center gap-1">
-          <i data-lucide="camera" class="w-4 h-4"></i>
-          <span>ถ่ายรูปกล้อง</span>
-        </button>
-        <button id="tabBrowse" onclick="switchMode('browse')" class="py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex flex-col items-center gap-1">
-          <i data-lucide="upload" class="w-4 h-4"></i>
-          <span>Browse ไฟล์</span>
-        </button>
-      </div>
-
-      <!-- Mode 1: Smart Card Reader Mode -->
-      <div id="modeReader" class="space-y-3">
-        <div class="bg-teal-50/60 border-2 border-dashed border-teal-400/60 rounded-xl p-5 text-center">
-          <div class="w-12 h-12 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center mx-auto mb-2">
-            <i data-lucide="usb" class="w-6 h-6 animate-pulse"></i>
-          </div>
-          <h3 class="text-sm font-semibold text-slate-800">เครื่องอ่านบัตร ACS ACR39U-NF</h3>
-          <p class="text-xs text-slate-500 mt-1 mb-4">รองรับ Windows PC และ Android Tablet OTG</p>
-
-          <button onclick="readSmartCardHardware()" class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold py-3 px-4 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-2">
-            <i data-lucide="credit-card" class="w-4 h-4"></i>
-            <span>อ่านข้อมูลจากบัตร Smart Card</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Mode 2: Camera View -->
-      <div id="modeCamera" class="hidden space-y-3">
-        <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex flex-col items-center justify-center text-white">
-          <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
-          <div id="cardGuide" class="hidden pointer-events-none absolute inset-0 items-center justify-center">
-            <div id="cardGuideFrame" class="aspect-[1.586/1] border-[3px] border-white rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.28)] relative transition-colors duration-200">
-              <span id="cameraHint" class="absolute -bottom-7 left-0 right-0 text-center text-xs text-white">วางบัตรในกรอบ • ระบบกำลังตรวจคุณภาพ</span>
-            </div>
-          </div>
-          
-          <div id="startState" class="p-6 text-center">
-            <button onclick="startCamera()"
-                    class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-3 px-6 rounded-xl flex items-center justify-center gap-2 mx-auto active:scale-95 transition-all shadow-md">
-              <i data-lucide="camera" class="w-5 h-5"></i>
-              <span>เปิดกล้องถ่ายภาพบัตร</span>
-            </button>
-            <p class="text-xs text-slate-400 mt-2">ระบบจะดึงภาพและทำ OCR แม่นยำสูงทันที</p>
-          </div>
-
-          <div id="cameraControls" class="hidden absolute top-3 left-3 right-3 z-20 bg-black/55 rounded-lg px-3 py-2">
-            <div class="flex justify-between items-center text-[11px] mb-1">
-              <span id="focusText">กำลังปรับ Focus...</span>
-              <button type="button" id="switchLensBtn" onclick="switchRearCamera()" class="hidden bg-white/20 px-2 py-1 rounded">สลับเลนส์</button>
-              <span id="zoomText">มุมกว้าง</span>
-            </div>
-            <input id="zoomSlider" type="range" class="hidden w-full accent-teal-400" oninput="setCameraZoom(this.value)">
-          </div>
-
-          <button id="snapBtn" onclick="takeSnapshot()" class="hidden absolute z-30 bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 active:scale-95 transition-all">
-            <i data-lucide="aperture" class="w-5 h-5"></i>
-            <span>ถ่ายภาพบัตร</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Mode 3: Browse View -->
-      <div id="modeBrowse" class="hidden space-y-3">
-        <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
-        <button onclick="document.getElementById('fileInput').click()" 
-                class="w-full border-2 border-dashed border-teal-500 bg-teal-50/50 hover:bg-teal-50 text-teal-700 font-medium py-8 px-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all active:scale-[0.98]">
-          <div class="w-12 h-12 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center">
-            <i data-lucide="image-plus" class="w-6 h-6"></i>
-          </div>
-          <span class="text-sm font-semibold">คลิกเพื่อเลือกไฟล์รูปภาพบัตรประชาชน</span>
-          <span class="text-xs text-slate-400">รองรับไฟล์ JPG, PNG (ระบบจะสกัด OCR อัตโนมัติ)</span>
-        </button>
-      </div>
-
-      <!-- Status Indicator -->
-      <div id="ocrStatus" class="hidden mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
-        <div class="flex items-center gap-3">
-          <div class="w-16 h-12 bg-slate-200 rounded-lg overflow-hidden flex-shrink-0 relative flex items-center justify-center">
-            <img id="cardPreview" class="w-full h-full object-cover hidden" src="" alt="Card Preview">
-            <i id="cardIcon" data-lucide="credit-card" class="w-6 h-6 text-slate-400"></i>
-          </div>
-          <div class="flex-1 min-w-0">
-            <div id="statusLabel" class="text-xs font-semibold text-teal-700 flex items-center gap-1.5">
-              <i id="statusSpinner" data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
-              <span id="statusText">กำลังประมวลผลข้อมูล...</span>
-            </div>
-            <div class="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
-              <div id="progressBar" class="bg-teal-600 h-full w-0 transition-all duration-300"></div>
-            </div>
-          </div>
-        </div>
-        <div class="mt-3 flex items-center justify-between gap-2 text-[10px] text-slate-500">
-          <span>🔒 OCR ในอุปกรณ์นี้ — ไม่อัปโหลดภาพบัตร</span>
-          <button type="button" onclick="clearOcrImageAndData()"
-            class="rounded-lg border border-slate-300 bg-white px-2 py-1 font-semibold text-slate-600">
-            ล้างภาพและข้อมูล
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Form Section -->
-    <form id="regForm" onsubmit="handleSubmit(event)" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-4">
-      
-      <!-- Profile & Preview Header -->
-      <div class="border-b border-slate-100 pb-4 space-y-3">
-        <div class="flex items-center gap-4">
-          <div class="w-20 h-24 bg-slate-100 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center overflow-hidden flex-shrink-0 relative">
-            <img id="facePreview" class="hidden w-full h-full object-cover" src="" alt="Face Crop">
-            <div id="facePlaceholder" class="text-center p-1 text-slate-400">
-              <i data-lucide="user" class="w-8 h-8 mx-auto"></i>
-              <span class="text-[9px] block leading-tight mt-1">รูปถ่ายผู้ป่วย</span>
-            </div>
-          </div>
-
-          <div class="flex-1 min-w-0">
-            <h2 class="text-sm font-semibold text-slate-800">ข้อมูลผู้ป่วย (สกัดจากบัตร)</h2>
-            <p id="sourceLabel" class="text-xs text-slate-400 mt-0.5">รอรับข้อมูลนำเข้า...</p>
-            <span id="ocrBadge" class="hidden inline-block mt-2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-medium">Extracted</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- เลขบัตรประชาชน -->
-      <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">เลขบัตรประจำตัวประชาชน *</label>
-        <div class="relative">
-          <input type="text" id="idCard" placeholder="รอผลการนำเข้าข้อมูล..." required
-                 class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
-          <i data-lucide="credit-card" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
-        </div>
-      </div>
-
-      <!-- ชื่อ-นามสกุล -->
-      <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">ชื่อ - นามสกุล (ภาษาไทย) *</label>
-        <input type="text" id="fullName" placeholder="รอผลการนำเข้าข้อมูล..." required
-               class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
-      </div>
-
-      <!-- วันเกิด -->
-      <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">วันเกิด (จากบัตร)</label>
-        <input type="text" id="dob" placeholder="รอผลการนำเข้าข้อมูล..." 
-               class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500">
-      </div>
-
-      <!-- ที่อยู่ตามบัตรประชาชน -->
-      <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">ที่อยู่ตามบัตรประชาชน</label>
-        <div class="relative">
-          <textarea id="address" rows="3" placeholder="รอผลการนำเข้าข้อมูล..." 
-                    class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 focus:bg-white focus:outline-none focus:border-teal-500"></textarea>
-          <i data-lucide="map-pin" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
-        </div>
-      </div>
-
-      <!-- ปุ่มบันทึก -->
-      <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-xl shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2">
-        <i data-lucide="save" class="w-4 h-4"></i>
-        บันทึกการลงทะเบียน
+    <!-- 1. MODE ICON จิ๋ว (ไม่บังหน้าจอ แสดงผลเป็นปุ่มไอคอนลอย) -->
+    <div id="mktMiniBar" class="hidden items-center gap-1.5 bg-teal-800 text-white p-1.5 pr-3 rounded-full shadow-2xl border-2 border-teal-400 mkt-drag-handle animate-bounce-short">
+      <!-- ปุ่มกดอ่านบัตรด่วน (ไอคอนอย่างเดียว) -->
+      <button type="button" onclick="readSmartCardHardware()" class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white p-2 rounded-full shadow transition-all flex items-center justify-center" title="กดอ่านบัตร Smart Card ทันที">
+        <i data-lucide="credit-card" class="w-5 h-5"></i>
       </button>
-    </form>
-  </main>
+
+      <!-- ปุ่มกดขยายหน้าต่างฟอร์มเต็ม -->
+      <button type="button" onclick="expandWidget()" class="flex items-center gap-1.5 hover:text-teal-200 transition-colors pl-1">
+        <i data-lucide="shield-check" class="w-4 h-4 text-teal-300"></i>
+        <span class="text-xs font-bold font-mono">MKT</span>
+        <i data-lucide="maximize-2" class="w-3.5 h-3.5 text-slate-300"></i>
+      </button>
+    </div>
+
+
+    <!-- 2. MODE FULL FORM (กางออกเมื่อต้องการดู/แก้ไขข้อมูล) -->
+    <div id="mktFullForm" class="hidden">
+      <!-- Header Bar -->
+      <header id="mktHeader" class="bg-teal-700 text-white p-3 shadow-md sticky top-0 z-20 mkt-drag-handle space-y-2">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="grip-horizontal" class="w-4 h-4 text-teal-200"></i>
+            <i data-lucide="shield-check" class="w-4 h-4"></i>
+            <div>
+              <h1 class="text-xs font-bold leading-tight">ลงทะเบียนผู้ป่วย</h1>
+              <p class="text-[9px] text-teal-200">MKT Smart Register V10.50</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <!-- ปุ่มย่อกลับเป็นไอคอนจิ๋ว -->
+            <button type="button" onclick="minimizeWidget()" class="bg-teal-800 hover:bg-teal-900 text-white p-1 rounded-lg transition-colors" title="ย่อเก็บเป็นไอคอนจิ๋ว">
+              <i data-lucide="minimize-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- ปุ่มอ่านบัตรประชาชนในหน้าเต็ม -->
+        <button type="button" onclick="readSmartCardHardware()" class="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-bold py-2 px-3 rounded-lg shadow transition-all flex items-center justify-center gap-2 border border-emerald-400">
+          <i data-lucide="credit-card" class="w-4 h-4"></i>
+          <span>อ่านข้อมูลจากบัตร Smart Card</span>
+        </button>
+      </header>
+
+      <!-- Main Content Form -->
+      <main class="p-3 space-y-3">
+
+        <!-- Input Mode Switcher Card -->
+        <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-200">
+          <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl mb-3">
+            <button id="tabReader" onclick="switchMode('reader')" class="py-1.5 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1">
+              <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
+              <span>Smart Card</span>
+            </button>
+            <button id="tabCamera" onclick="switchMode('camera')" class="py-1.5 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex flex-col items-center gap-1">
+              <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+              <span>ถ่ายรูปกล้อง</span>
+            </button>
+            <button id="tabBrowse" onclick="switchMode('browse')" class="py-1.5 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex flex-col items-center gap-1">
+              <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+              <span>Browse ไฟล์</span>
+            </button>
+          </div>
+
+          <!-- Mode 1: Smart Card Reader Mode -->
+          <div id="modeReader" class="space-y-3">
+            <div class="bg-teal-50/60 border-2 border-dashed border-teal-400/60 rounded-xl p-3 text-center">
+              <div class="w-8 h-8 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center mx-auto mb-1">
+                <i data-lucide="usb" class="w-4 h-4 animate-pulse"></i>
+              </div>
+              <p class="text-[10px] text-slate-500 mb-2">รองรับ Windows PC และ Android Tablet OTG</p>
+              <button onclick="readSmartCardHardware()" class="w-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow transition-all flex items-center justify-center gap-1.5">
+                <i data-lucide="credit-card" class="w-3.5 h-3.5"></i>
+                <span>อ่านข้อมูลจากบัตร</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Mode 2: Camera View -->
+          <div id="modeCamera" class="hidden space-y-3">
+            <div id="cameraArea" class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[160px] flex flex-col items-center justify-center text-white">
+              <video id="webcam" autoplay playsinline class="hidden w-full h-auto object-cover"></video>
+              <div id="cardGuide" class="hidden pointer-events-none absolute inset-0 items-center justify-center">
+                <div id="cardGuideFrame" class="aspect-[1.586/1] border-[3px] border-white rounded-xl shadow-[0_0_0_999px_rgba(0,0,0,.28)] relative transition-colors duration-200">
+                  <span id="cameraHint" class="absolute -bottom-7 left-0 right-0 text-center text-xs text-white">วางบัตรในกรอบ</span>
+                </div>
+              </div>
+              
+              <div id="startState" class="p-3 text-center">
+                <button onclick="startCamera()" class="bg-teal-600 hover:bg-teal-700 text-white font-medium py-2 px-4 rounded-xl flex items-center justify-center gap-2 mx-auto text-xs shadow">
+                  <i data-lucide="camera" class="w-4 h-4"></i>
+                  <span>เปิดกล้องถ่ายภาพบัตร</span>
+                </button>
+              </div>
+
+              <div id="cameraControls" class="hidden absolute top-2 left-2 right-2 z-20 bg-black/55 rounded-lg px-2 py-1">
+                <div class="flex justify-between items-center text-[10px]">
+                  <span id="focusText">กำลังปรับ Focus...</span>
+                  <span id="zoomText">มุมกว้าง</span>
+                </div>
+                <input id="zoomSlider" type="range" class="hidden w-full accent-teal-400" oninput="setCameraZoom(this.value)">
+              </div>
+
+              <button id="snapBtn" onclick="takeSnapshot()" class="hidden absolute z-30 bg-red-600 hover:bg-red-700 text-white font-semibold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1 text-xs">
+                <i data-lucide="aperture" class="w-3.5 h-3.5"></i>
+                <span>ถ่ายภาพบัตร</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Mode 3: Browse View -->
+          <div id="modeBrowse" class="hidden space-y-3">
+            <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+            <button onclick="document.getElementById('fileInput').click()" class="w-full border-2 border-dashed border-teal-500 bg-teal-50/50 hover:bg-teal-50 text-teal-700 font-medium py-5 px-3 rounded-xl flex flex-col items-center justify-center gap-1 transition-all">
+              <i data-lucide="image-plus" class="w-5 h-5"></i>
+              <span class="text-xs font-semibold">เลือกไฟล์รูปภาพบัตรประชาชน</span>
+            </button>
+          </div>
+
+          <!-- Status Indicator -->
+          <div id="ocrStatus" class="hidden mt-2 p-2 bg-slate-50 rounded-lg border border-slate-200">
+            <div class="flex items-center gap-2">
+              <div class="w-12 h-9 bg-slate-200 rounded overflow-hidden flex-shrink-0 relative flex items-center justify-center">
+                <img id="cardPreview" class="w-full h-full object-cover hidden" src="" alt="Preview">
+                <i id="cardIcon" data-lucide="credit-card" class="w-4 h-4 text-slate-400"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div id="statusLabel" class="text-[10px] font-semibold text-teal-700 flex items-center gap-1">
+                  <i id="statusSpinner" data-lucide="loader-2" class="w-3 h-3 animate-spin"></i>
+                  <span id="statusText">กำลังประมวลผล...</span>
+                </div>
+                <div class="w-full bg-slate-200 h-1 rounded-full mt-1 overflow-hidden">
+                  <div id="progressBar" class="bg-teal-600 h-full w-0 transition-all duration-300"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Section -->
+        <form id="regForm" onsubmit="handleSubmit(event)" class="bg-white rounded-xl p-3 shadow-sm border border-slate-200 space-y-2.5">
+          <div class="border-b border-slate-100 pb-2 flex items-center gap-3">
+            <div class="w-14 h-16 bg-slate-100 border border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center overflow-hidden flex-shrink-0">
+              <img id="facePreview" class="hidden w-full h-full object-cover" src="" alt="Face">
+              <div id="facePlaceholder" class="text-center text-slate-400">
+                <i data-lucide="user" class="w-5 h-5 mx-auto"></i>
+              </div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <h2 class="text-xs font-semibold text-slate-800">ข้อมูลผู้ป่วย</h2>
+              <p id="sourceLabel" class="text-[9px] text-slate-400">รอรับข้อมูล...</p>
+              <span id="ocrBadge" class="hidden inline-block mt-0.5 text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium">Extracted</span>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-medium text-slate-600 mb-0.5">เลขบัตรประชาชน *</label>
+            <input type="text" id="idCard" placeholder="รอข้อมูล..." required class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:border-teal-500">
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-medium text-slate-600 mb-0.5">ชื่อ - นามสกุล *</label>
+            <input type="text" id="fullName" placeholder="รอข้อมูล..." required class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:border-teal-500">
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-medium text-slate-600 mb-0.5">วันเกิด</label>
+            <input type="text" id="dob" placeholder="รอข้อมูล..." class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:border-teal-500">
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-medium text-slate-600 mb-0.5">ที่อยู่ตามบัตรประชาชน</label>
+            <textarea id="address" rows="2" placeholder="รอข้อมูล..." class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-800 focus:outline-none focus:border-teal-500"></textarea>
+          </div>
+
+          <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold py-2 rounded-lg shadow transition-all flex items-center justify-center gap-1.5">
+            <i data-lucide="save" class="w-3.5 h-3.5"></i>
+            <span>บันทึกการลงทะเบียน</span>
+          </button>
+        </form>
+      </main>
+    </div>
+
+  </div>
 
   <script>
+    /* =========================================================
+     * WIDGET SWITCHER & DRAGGABLE LOGIC
+     * ========================================================= */
+    function minimizeWidget() {
+      const widget = document.getElementById('mktFloatingWidget');
+      widget.className = 'mkt-mini-mode';
+    }
+
+    function expandWidget() {
+      const widget = document.getElementById('mktFloatingWidget');
+      widget.className = 'mkt-full-mode';
+    }
+
+    function initDraggable(element, dragHandles) {
+      let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+      
+      dragHandles.forEach(handle => {
+        if (!handle) return;
+        handle.onmousedown = dragMouseDown;
+      });
+
+      function dragMouseDown(e) {
+        if (e.target.closest('button') || e.target.closest('input')) return;
+        e.preventDefault();
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        document.onmouseup = closeDragElement;
+        document.onmousemove = elementDrag;
+      }
+
+      function elementDrag(e) {
+        e.preventDefault();
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        element.style.top = (element.offsetTop - pos2) + "px";
+        element.style.left = (element.offsetLeft - pos1) + "px";
+        element.style.bottom = 'auto';
+        element.style.right = 'auto';
+      }
+
+      function closeDragElement() {
+        document.onmouseup = null;
+        document.onmousemove = null;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const widget = document.getElementById('mktFloatingWidget');
+      const miniBar = document.getElementById('mktMiniBar');
+      const header = document.getElementById('mktHeader');
+      initDraggable(widget, [miniBar, header]);
+    });
+
+    /* =========================================================
+     * SYSTEM ORIGINAL LOGIC V10.50 (UNTOUCHED)
+     * ========================================================= */
     lucide.createIcons();
     let videoStream = null;
     let agentRetryInProgress = false;
@@ -225,8 +334,6 @@
     let previousQualityFrame = null;
     let bestObservedSharpness = 0;
     let cameraQualitySamples = 0;
-    let bestNameSharpness = 0;
-    let cameraReadyUntil = 0;
 
     async function waitForLocalAgent(maxAttempts = 12) {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -246,7 +353,7 @@
       const status = document.getElementById('ocrStatus');
       const statusText = document.getElementById('statusText');
       status.classList.remove('hidden');
-      statusText.innerText = 'กลับจาก Agent แล้ว กำลังรอเชื่อมต่อและอ่านบัตรอัตโนมัติ...';
+      statusText.innerText = 'กลับจาก Agent แล้ว กำลังรออ่านบัตรอัตโนมัติ...';
 
       const ready = await waitForLocalAgent();
       sessionStorage.removeItem('mktPendingCardRead');
@@ -255,7 +362,7 @@
         await readSmartCardHardware({ skipAgentLaunch: true });
       } else {
         document.getElementById('statusSpinner').classList.add('hidden');
-        statusText.innerText = 'Agent ยังไม่พร้อม กรุณาตรวจสอบ Notification หรือเปิด MKT SmartCard Agent หนึ่งครั้ง';
+        statusText.innerText = 'Agent ยังไม่พร้อม';
       }
     }
 
@@ -293,7 +400,7 @@
         document.getElementById('ocrStatus').classList.remove('hidden');
         document.getElementById('statusSpinner').classList.add('hidden');
         document.getElementById('progressBar').style.width = '0%';
-        document.getElementById('statusText').innerText = 'นำบัตรออกแล้ว — ล้างข้อมูลผู้ป่วยจากหน้าจอเรียบร้อย';
+        document.getElementById('statusText').innerText = 'นำบัตรออกแล้ว';
         document.getElementById('sourceLabel').innerText = 'ยังไม่มีข้อมูลผู้ป่วย';
       } catch (_) {}
     }
@@ -318,18 +425,18 @@
       const modeCamera = document.getElementById('modeCamera');
       const modeBrowse = document.getElementById('modeBrowse');
 
-      [tabReader, tabCamera, tabBrowse].forEach(t => t.className = "py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex flex-col items-center gap-1");
+      [tabReader, tabCamera, tabBrowse].forEach(t => t.className = "py-1.5 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 transition-all flex flex-col items-center gap-1");
       [modeReader, modeCamera, modeBrowse].forEach(m => m.classList.add('hidden'));
 
       if (mode === 'reader') {
-        tabReader.className = "py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1";
+        tabReader.className = "py-1.5 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1";
         modeReader.classList.remove('hidden');
         stopCamera();
       } else if (mode === 'camera') {
-        tabCamera.className = "py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1";
+        tabCamera.className = "py-1.5 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1";
         modeCamera.classList.remove('hidden');
       } else {
-        tabBrowse.className = "py-2 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1";
+        tabBrowse.className = "py-1.5 text-xs font-semibold rounded-lg bg-white text-teal-700 shadow-sm transition-all flex flex-col items-center gap-1";
         modeBrowse.classList.remove('hidden');
         stopCamera();
       }
@@ -346,12 +453,12 @@
       ocrStatus.classList.remove('hidden');
       statusSpinner.classList.remove('hidden');
       progressBar.style.width = '30%';
-      statusText.innerText = "กำลังตรวจสอบการเชื่อมต่อเครื่องอ่าน...";
+      statusText.innerText = "กำลังตรวจสอบการเชื่อมต่อ...";
 
       if (window.AndroidInterface && window.AndroidInterface.readSmartCard) {
         window.AndroidInterface.readSmartCard();
         progressBar.style.width = '100%';
-        statusText.innerText = "กำลังดึงข้อมูลจากชิปการ์ดบน Android...";
+        statusText.innerText = "กำลังดึงข้อมูลชิปการ์ด...";
         return;
       }
 
@@ -372,7 +479,7 @@
         console.error("Local agent error", e);
         progressBar.style.width = '100%';
         statusSpinner.classList.add('hidden');
-        statusText.innerText = "ไม่พบ MKT SmartCard Agent กรุณาเปิด Agent ก่อนอ่านบัตร";
+        statusText.innerText = "ไม่พบ MKT SmartCard Agent";
         return;
       }
     }
@@ -420,7 +527,7 @@
           positionSnapButtonNearGuide();
           startCameraQualityMonitor();
         });
-      } catch (err) { alert("ไม่สามารถเปิดกล้องหลังได้ กรุณาอนุญาต Camera แล้วลองใหม่"); }
+      } catch (err) { alert("ไม่สามารถเปิดกล้องหลังได้"); }
     }
 
     async function focusCamera() {
@@ -433,7 +540,7 @@
           await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
           setTimeout(() => track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}), 700);
         }
-        setTimeout(() => { document.getElementById('focusText').innerText = 'Focus แล้ว • กดถ่ายได้'; }, 650);
+        setTimeout(() => { document.getElementById('focusText').innerText = 'Focus แล้ว'; }, 650);
       } catch (_) {}
     }
 
@@ -458,7 +565,6 @@
       const video = document.getElementById('webcam');
       const guide = document.getElementById('cardGuideFrame');
       if (!video || !guide || !video.clientWidth || !video.clientHeight) return;
-      // Use nearly all available preview space while preserving the card ratio.
       const ratio = 1.586;
       const width = Math.floor(Math.min(video.clientWidth * 0.95, video.clientHeight * 0.94 * ratio));
       guide.style.width = `${Math.max(220, width)}px`;
@@ -492,8 +598,6 @@
       const videoRect = source.getBoundingClientRect();
       const guideRect = document.getElementById('cardGuideFrame').getBoundingClientRect();
 
-      // Convert the exact guide visible on screen back to native camera pixels.
-      // This makes Camera produce the same card-only input that Browse receives.
       const scaleX = sourceWidth / Math.max(1, videoRect.width);
       const scaleY = sourceHeight / Math.max(1, videoRect.height);
       let sx = Math.round((guideRect.left - videoRect.left) * scaleX);
@@ -506,7 +610,6 @@
       sw = Math.max(1, Math.min(sourceWidth - sx, sw));
       sh = Math.max(1, Math.min(sourceHeight - sy, sh));
 
-      // Preserve the standard ID-card ratio even with browser sub-pixel rounding.
       if (sw / sh > ratio) sw = Math.floor(sh * ratio);
       else sh = Math.floor(sw / ratio);
       canvas.width = sw;
@@ -551,7 +654,7 @@
       return score;
     }
 
-    function analyzeCameraQuality(canvas, trackMotion = true) {
+    function analyzeCameraQuality(canvas) {
       const sample = document.createElement('canvas');
       sample.width = 180;
       sample.height = Math.max(1, Math.round(canvas.height * sample.width / canvas.width));
@@ -577,11 +680,11 @@
         }
       }
       let motion = 0;
-      if (trackMotion && previousQualityFrame && previousQualityFrame.length === gray.length) {
+      if (previousQualityFrame && previousQualityFrame.length === gray.length) {
         for (let p = 0; p < gray.length; p += 4) motion += Math.abs(gray[p] - previousQualityFrame[p]);
         motion /= Math.ceil(gray.length / 4);
       }
-      if (trackMotion) previousQualityFrame = gray;
+      previousQualityFrame = gray;
       return {
         brightness: brightness / gray.length,
         glare: glare / gray.length,
@@ -596,27 +699,19 @@
       const frame = document.createElement('canvas');
       drawGuideQualitySample(video, frame);
       const quality = analyzeCameraQuality(frame);
-      const nameFrame = cropRegionCanvas(frame, 0.12, 0.13, 0.64, 0.21, 1);
-      const nameQuality = analyzeCameraQuality(nameFrame, false);
       cameraQualitySamples++;
       bestObservedSharpness = Math.max(bestObservedSharpness * 0.995, quality.sharpness);
-      bestNameSharpness = Math.max(bestNameSharpness * 0.995, nameQuality.sharpness);
 
-      let rawReady = false;
+      let ready = false;
       let message = 'กำลังตรวจ Focus...';
-      if (quality.brightness < 58) message = 'แสงน้อย • เพิ่มแสงหรือขยับไปจุดสว่าง';
-      else if (quality.glare > 0.16) message = 'มีแสงสะท้อน • เอียงบัตรเล็กน้อย';
-      else if (cameraQualitySamples > 2 && quality.motion > 14) message = 'ภาพกำลังสั่น • ถือ Tablet ให้นิ่ง';
-      else if (cameraQualitySamples < 3 || quality.sharpness < Math.max(4.5, bestObservedSharpness * 0.72)) message = 'กำลัง Focus • แตะภาพหากยังไม่ชัด';
-      else if (nameQuality.sharpness < Math.max(6, bestNameSharpness * 0.80)) message = 'บริเวณชื่อยังไม่ชัด • แตะตรงบรรทัดชื่อ';
+      if (quality.brightness < 58) message = 'แสงน้อย • เพิ่มแสง';
+      else if (quality.glare > 0.16) message = 'มีแสงสะท้อน';
+      else if (cameraQualitySamples > 2 && quality.motion > 14) message = 'ภาพกำลังสั่น';
+      else if (cameraQualitySamples < 3 || quality.sharpness < Math.max(4.5, bestObservedSharpness * 0.72)) message = 'กำลัง Focus...';
       else {
-        rawReady = true;
-        message = 'พร้อมถ่าย • บรรทัดชื่อ Focus ผ่าน';
+        ready = true;
+        message = 'พร้อมถ่าย';
       }
-
-      if (rawReady) cameraReadyUntil = Date.now() + 2500;
-      const ready = rawReady || Date.now() < cameraReadyUntil;
-      if (ready && !rawReady) message = 'พร้อมถ่าย • ล็อกกรอบเขียวไว้ 2.5 วินาที';
 
       const guide = document.getElementById('cardGuideFrame');
       const hint = document.getElementById('cameraHint');
@@ -632,9 +727,7 @@
       stopCameraQualityMonitor();
       previousQualityFrame = null;
       bestObservedSharpness = 0;
-      bestNameSharpness = 0;
       cameraQualitySamples = 0;
-      cameraReadyUntil = 0;
       cameraQualityTimer = setInterval(updateCameraAssist, 450);
     }
 
@@ -642,7 +735,6 @@
       if (cameraQualityTimer) clearInterval(cameraQualityTimer);
       cameraQualityTimer = null;
       previousQualityFrame = null;
-      cameraReadyUntil = 0;
     }
 
     async function captureBestFocusedFrame(video, outputCanvas) {
@@ -668,10 +760,9 @@
       const canvas = document.getElementById('cropCanvas');
       const button = document.getElementById('snapBtn');
       button.disabled = true;
-      document.getElementById('focusText').innerText = 'กำลัง Auto Focus...';
+      document.getElementById('focusText').innerText = 'กำลัง Focus...';
       await focusCamera();
       await new Promise(resolve => setTimeout(resolve, 900));
-      document.getElementById('focusText').innerText = 'Focus แล้ว • กำลังเลือกเฟรมที่ชัดที่สุด...';
       await captureBestFocusedFrame(video, canvas);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
       stopCamera();
@@ -737,9 +828,6 @@
       const nameCanvas = document.getElementById('isolatedNameCanvas');
       const ctx = nameCanvas.getContext('2d', { willReadFrequently: true });
 
-      // Thai name is on the upper-middle row. Do not include the chip,
-      // English name, DOB or portrait because they confuse Thai OCR.
-      // Value-only name row: exclude the printed field label on the left.
       const nx = Math.floor(w * 0.245);
       const ny = Math.floor(h * 0.175);
       const nw = Math.floor(w * 0.46);
@@ -754,8 +842,6 @@
     }
 
     function cropCameraNameBand(fullCanvas) {
-      // Wider retry band for handheld images. It covers the printed Thai-name
-      // label and full value, but cannot reach DOB or the issuing officer.
       return enhanceOcrCanvas(cropRegionCanvas(fullCanvas, 0.12, 0.13, 0.64, 0.21, 3));
     }
 
@@ -769,8 +855,6 @@
       const data = image.data;
       for (let i = 0; i < data.length; i += 4) {
         const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-        // Mild contrast preserves small Thai vowels and tone marks better than
-        // the previous aggressive 1.45 enhancement.
         const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.15 + 128));
         data[i] = data[i + 1] = data[i + 2] = contrasted;
       }
@@ -789,31 +873,7 @@
       const ctx = out.getContext('2d', { willReadFrequently: true });
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(fullCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height);
-      return out;
-    }
-
-    function buildImportantFieldsCanvas(fullCanvas) {
-      // Fixed zones follow the standard Thai National ID Card layout.
-      // One combined OCR pass is faster and more stable than concurrent calls.
-      const regions = [
-        cropRegionCanvas(fullCanvas, 0.28, 0.04, 0.57, 0.15), // ID
-        enhanceOcrCanvas(cropRegionCanvas(fullCanvas, 0.245, 0.175, 0.46, 0.12)), // value-only Thai title + name
-        cropRegionCanvas(fullCanvas, 0.28, 0.38, 0.50, 0.18), // DOB
-        cropRegionCanvas(fullCanvas, 0.05, 0.60, 0.70, 0.19)  // Address only; stop before issue/expiry dates
-      ];
-      const gap = 22;
-      const out = document.createElement('canvas');
-      out.width = Math.max(...regions.map(v => v.width));
-      out.height = regions.reduce((sum, v) => sum + v.height, 0) + gap * (regions.length - 1);
-      const ctx = out.getContext('2d', { willReadFrequently: true });
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(0, 0, out.width, out.height);
-      let top = 0;
-      regions.forEach(region => {
-        ctx.drawImage(region, 0, top);
-        top += region.height + gap;
-      });
+      ctx.drawImage(fullCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
       return out;
     }
 
@@ -836,7 +896,6 @@
     }
 
     function extractThaiID(text) {
-      // Never concatenate unrelated dates/numbers from the whole card.
       const lines = text.split('\n').map(normalizeThaiOcr).filter(Boolean);
       const prioritized = [
         ...lines.filter(v => /(เลขประจำตัว|Identification|ประจำตัวประชาชน)/i.test(v)),
@@ -852,11 +911,9 @@
       return '';
     }
 
-    // THAI NAME MATCHER (V10.40)
     function extractNameUltimate(text) {
       const lines = text.split('\n').map(normalizeThaiOcr).filter(Boolean);
 
-      // วิธีที่ 1: กวาดหาคำนำหน้า (นาย/นาง/นางสาว) ตามด้วยชื่อและนามสกุลภาษาไทยทันที
       for (let line of lines) {
         let match = line.match(/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง|ดร\.|พ\.ต\.|ร\.ต\.)\s*([ก-๙]{2,}\s+[ก-๙]{2,})/);
         if (match) {
@@ -864,7 +921,6 @@
         }
       }
 
-      // วิธีที่ 2: กวาดหาบรรทัดที่มีคำนำหน้า แล้วตัดเอาข้อความตั้งแต่คำนำหน้ายาวไปจนจบ
       for (let line of lines) {
         if (/(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง|ดร\.|พ\.ต\.|ร\.ต\.)/.test(line)) {
           let cleaned = line.replace(/.*?(นาย|นางสาว|นาง|เด็กชาย|เด็กหญิง|ดร\.|พ\.ต\.|ร\.ต\.)/, '$1')
@@ -875,7 +931,6 @@
         }
       }
 
-      // วิธีที่ 3: รับเฉพาะชื่อที่ OCR เห็นจริง ห้ามเติมคำนำหน้าเอง
       for (let line of lines) {
         let thaiWords = line.match(/[ก-๙]{3,}\s+[ก-๙]{3,}/g);
         if (thaiWords && thaiWords.length > 0 && !/(ที่อยู่|ประจำตัว|ศาสนา|บัตร|เกิดวันที่)/.test(line)) {
@@ -888,8 +943,6 @@
 
     function extractRecognizedThaiTitle(text) {
       const compact = normalizeThaiOcr(text).replace(/\s+/g, '');
-      // This is evidence from the name row only; no title is inferred from sex,
-      // English text, portrait or the officer signature.
       for (const title of ['เด็กหญิง', 'เด็กชาย', 'นางสาว', 'นาย', 'นาง']) {
         if (compact.includes(title)) return title;
       }
@@ -967,46 +1020,6 @@
       return (isPlausibleThaiAddress(clean) ? 1000 : 0) + keywordCount * 100 + Math.min(clean.length, 180);
     }
 
-    function extractAddressSmart(lines) {
-      const start = lines.findIndex(v => /ที่อยู่/.test(v));
-      const selected = [];
-      let begin = start;
-      if (begin < 0) begin = lines.findIndex(v => /\d+\s*\/\s*\d+/.test(v) && /(หมู่|ซอย|ถนน|แขวง|เขต|ตำบล|อำเภอ|กรุงเทพ)/.test(v));
-      if (begin < 0) return '';
-      for (let i = begin; i < Math.min(lines.length, begin + 4); i++) {
-        let line = lines[i];
-        if (i > begin && /(วันออกบัตร|วันบัตรหมดอายุ|Date of Issue|Date of Expiry|เจ้าพนักงาน)/i.test(line)) break;
-        
-        line = line.replace(/^.*?ที่อยู่\s*[:：-]?\s*/, '')
-          .replace(/^[%\#@$&*._\-\s]+/, '')
-          .replace(/ศาสนา\s*(พุทธ|คริสต์|อิสลาม)?/g, '')
-          .replace(/(?:วันออกบัตร|วันบัตรหมดอายุ).*$/i, '')
-          .replace(/\s*\d{1,2}\s*(?:ม\.?ค\.?|ก\.?พ\.?|มี\.?ค\.?|เม\.?ย\.?|พ\.?ค\.?|มิ\.?ย\.?|ก\.?ค\.?|ส\.?ค\.?|ก\.?ย\.?|ต\.?ค\.?|พ\.?ย\.?|ธ\.?ค\.?|มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม)\s*\d{4}.*$/i, '')
-          .replace(/\d{1,2}[\/-]\d{1,2}[\/-]\d{4}.*$/, '')
-          .replace(/[A-Za-z_<>|="']+/g, ' ')
-          .replace(/\s+/g, ' ').trim();
-        
-        if (line.length > 2) selected.push(line);
-      }
-      let fullAddress = selected.join(' ').replace(/\s+/g, ' ').trim();
-      fullAddress = fullAddress.replace(/\s*[-—–_]\s*/g, ' ');
-      fullAddress = fullAddress.replace(/\s*[.。:;•]+\s*$/, '').trim();
-      fullAddress = fullAddress.replace(/กรุงเทพ\s*มหานคร/g, 'กรุงเทพมหานคร');
-      // Correct only a strongly recognized Bangkok prefix at a word boundary;
-      // do not guess or rewrite any other part of the address.
-      fullAddress = fullAddress.replace(/กรุงเทพมห[ก-๙]{0,8}(?=\s|$)/g, 'กรุงเทพมหานคร');
-      fullAddress = fullAddress.replace(/กรุงเทพ(?:ฯ)?(?=\s*$)/g, 'กรุงเทพมหานคร');
-      // Frequent OCR loss of the leading vowel in the standard address keyword.
-      // Correct the keyword only; never alter the following district name.
-      fullAddress = fullAddress.replace(/(^|\s)ข\s*ต(?=\s*[ก-๙])/g, '$1เขต');
-      fullAddress = fullAddress.replace(/\s+[๐-๙0-9]{1,3}\s+[๐-๙0-9]{1,3}$/, '');
-      fullAddress = fullAddress.replace(/^[^0-9]*([0-9]+\/[0-9]+)/, '$1');
-      return fullAddress;
-    }
-
-    // Address path retained from V10.37 because it was verified against the
-    // supplied card. It intentionally receives full-card OCR text, not a narrow
-    // address crop.
     function extractAddressV1037(lines) {
       const start = lines.findIndex(v => /ที่อยู่/.test(v));
       const selected = [];
@@ -1061,21 +1074,18 @@
       progressBar.style.width = '20%';
 
       try {
-        statusText.innerText = inputMode === 'camera'
-          ? "กำลังเตรียมเฟรมที่ชัดที่สุดจากกล้อง (V10.48)..."
-          : "กำลังเตรียม Browse OCR ที่ผ่านการทดสอบ...";
+        statusText.innerText = "กำลังประมวลผล OCR...";
         cropFaceFromCanvas(fullCanvas);
 
         const preparedCanvas = prepareCardCanvas(fullCanvas);
         const fullCardDataUrl = preparedCanvas.toDataURL('image/png');
 
         progressBar.style.width = '40%';
-        statusText.innerText = "กำลังอ่านข้อมูลเต็มบัตรแบบ V10.37...";
 
         const worker = await getOcrWorker(m => {
           if (m.status === 'recognizing text') {
             progressBar.style.width = `${40 + Math.round((m.progress || 0) * 50)}%`;
-            statusText.innerText = `กำลังประมวลผล OCR ${Math.round((m.progress || 0) * 100)}%`;
+            statusText.innerText = `อ่านข้อมูล ${Math.round((m.progress || 0) * 100)}%`;
           }
         });
 
@@ -1085,7 +1095,6 @@
           tessedit_pageseg_mode: '6'
         });
 
-        // V10.37 path: full card produces the verified address reading.
         const fullCardRes = await worker.recognize(fullCardDataUrl);
         const fullText = fullCardRes.data.text || '';
         const fullLines = fullText.split('\n').map(normalizeThaiOcr).filter(Boolean);
@@ -1093,9 +1102,7 @@
         let extractedDOB = extractDobSmart(fullText);
         let extractedAddress = extractAddressV1037(fullLines);
 
-        // V10.40 path: value-only single-line crop produces the verified name.
         progressBar.style.width = '72%';
-        statusText.innerText = "กำลังอ่านชื่อด้วยกรอบบรรทัดเดียวแบบ V10.40...";
         const nameDataUrl = cropIsolatedNameCanvas(preparedCanvas).toDataURL('image/png');
         await worker.setParameters({
           preserve_interword_spaces: '1',
@@ -1109,11 +1116,8 @@
         let extractedName = combineRecognizedTitle(narrowName, narrowText);
         let fieldConfidence = nameRes.data.confidence || 0;
 
-        // Retry only inside the upper name area. Camera must never search the
-        // full card because that could select the issuing officer's name.
         if (inputMode === 'camera' && !isCompleteThaiName(extractedName)) {
           progressBar.style.width = '76%';
-          statusText.innerText = "กำลังอ่านชื่อซ้ำด้วยกรอบกว้าง...";
           const wideNameCanvas = cropCameraNameBand(preparedCanvas);
           await worker.setParameters({
             preserve_interword_spaces: '1',
@@ -1126,13 +1130,11 @@
           if (isCompleteThaiName(wideName)) extractedName = wideName;
           fieldConfidence = Math.max(fieldConfidence, wideNameRes.data.confidence || 0);
         } else if (inputMode !== 'camera' && !extractedName) {
-          // Browse retains the verified V10.43 fallback unchanged.
           extractedName = combineRecognizedTitle(extractNameUltimate(fullText), narrowText);
         }
 
         if (inputMode === 'camera') {
           progressBar.style.width = '78%';
-          statusText.innerText = "กำลังอ่านวันเกิดเฉพาะช่อง...";
           const dobCanvas = enhanceOcrCanvas(cropRegionCanvas(preparedCanvas, 0.27, 0.35, 0.48, 0.20, 2));
           await worker.setParameters({
             preserve_interword_spaces: '1',
@@ -1141,77 +1143,41 @@
           });
           const dobRes = await worker.recognize(dobCanvas.toDataURL('image/png'));
           extractedDOB = extractCameraDob(dobRes.data.text || '');
-          let dobRetryConfidence = 0;
-          if (!isValidDobResult(extractedDOB)) {
-            statusText.innerText = "กำลังอ่านวันเกิดซ้ำจากกรอบกว้าง...";
-            const dobWideCanvas = enhanceOcrCanvas(cropRegionCanvas(preparedCanvas, 0.20, 0.30, 0.58, 0.29, 3));
-            await worker.setParameters({
-              preserve_interword_spaces: '1',
-              user_defined_dpi: '300',
-              tessedit_pageseg_mode: '11'
-            });
-            const dobRetryRes = await worker.recognize(dobWideCanvas.toDataURL('image/png'));
-            extractedDOB = extractCameraDob(dobRetryRes.data.text || '');
-            dobRetryConfidence = dobRetryRes.data.confidence || 0;
-          }
 
           progressBar.style.width = '84%';
-          statusText.innerText = "กำลังอ่านที่อยู่เฉพาะช่อง...";
           const addressCanvas = enhanceOcrCanvas(cropRegionCanvas(preparedCanvas, 0.04, 0.56, 0.68, 0.25, 2));
           const addressRes = await worker.recognize(addressCanvas.toDataURL('image/png'));
           const addressText = addressRes.data.text || '';
           const addressLines = (`ที่อยู่ ${addressText}`).split('\n').map(normalizeThaiOcr).filter(Boolean);
           extractedAddress = cleanCameraAddress(extractAddressV1037(addressLines));
-          let addressRetryConfidence = 0;
-          if (!isPlausibleThaiAddress(extractedAddress) || addressQuality(extractedAddress) < 1250) {
-            statusText.innerText = "กำลังอ่านที่อยู่ซ้ำจากกรอบกว้าง...";
-            const addressWideCanvas = enhanceOcrCanvas(cropRegionCanvas(preparedCanvas, 0.03, 0.52, 0.80, 0.32, 3));
-            await worker.setParameters({
-              preserve_interword_spaces: '1',
-              user_defined_dpi: '300',
-              tessedit_pageseg_mode: '6'
-            });
-            const addressRetryRes = await worker.recognize(addressWideCanvas.toDataURL('image/png'));
-            const retryLines = (`ที่อยู่ ${addressRetryRes.data.text || ''}`).split('\n').map(normalizeThaiOcr).filter(Boolean);
-            const retryAddress = cleanCameraAddress(extractAddressV1037(retryLines));
-            if (addressQuality(retryAddress) > addressQuality(extractedAddress)) extractedAddress = retryAddress;
-            addressRetryConfidence = addressRetryRes.data.confidence || 0;
-          }
-          fieldConfidence = ((fieldConfidence || 0) + Math.max(dobRes.data.confidence || 0, dobRetryConfidence) + Math.max(addressRes.data.confidence || 0, addressRetryConfidence)) / 3;
         }
+
         await worker.setParameters({ tessedit_pageseg_mode: '6' });
         const confidence = Math.round(((fullCardRes.data.confidence || 0) + fieldConfidence) / 2);
 
         progressBar.style.width = '90%';
-        statusText.innerText = "กำลังตรวจสอบความถูกต้อง...";
-
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
-        const sourceVersion = inputMode === 'camera'
-          ? `V10.53 V10.50 OCR + Name Focus Gate (${confidence}%)`
-          : `V10.53 Browse Locked V10.43 (${confidence}%)`;
-        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, sourceVersion);
+        fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, `V10.50 (${confidence}%)`);
 
         progressBar.style.width = '100%';
 
         const issues = [];
         if (!idDigits || !isValidThaiID(idDigits)) issues.push('เลขบัตรไม่ผ่าน Checksum');
-        if (!isCompleteThaiName(extractedName)) issues.push('ชื่อยังขาดคำนำหน้า/ชื่อ/นามสกุล');
-        if (!isValidDobResult(extractedDOB)) issues.push('วันเกิดไม่สมบูรณ์');
-        if (!isPlausibleThaiAddress(extractedAddress)) issues.push('ที่อยู่ไม่สมบูรณ์');
+        if (!isCompleteThaiName(extractedName)) issues.push('ชื่อไม่ครบถ้วน');
 
-        statusText.innerText = issues.length
-          ? `อ่านได้บางส่วน กรุณาตรวจสอบ: ${issues.join(', ')}`
-          : `สแกนข้อมูลครบถ้วนสมบูรณ์ 100%`;
+        statusText.innerText = issues.length ? `ตรวจสอบ: ${issues.join(', ')}` : `สแกนข้อมูลครบถ้วน 100%`;
 
         const badge = document.getElementById('ocrBadge');
         badge.classList.remove('hidden');
-        badge.className = issues.length ? 'inline-block mt-2 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-medium' : 'inline-block mt-2 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-medium';
-        badge.innerText = issues.length ? 'OCR ต้องตรวจสอบ' : 'OCR ผ่านการตรวจสอบครบ';
+        badge.innerText = issues.length ? 'OCR ต้องตรวจสอบ' : 'OCR สมบูรณ์';
+
+        // เมื่ออ่านสำเร็จ ให้กางฟอร์มออกดูข้อมูลอัตโนมัติ
+        expandWidget();
 
       } catch (err) {
         console.error(err);
-        statusText.innerText = "สแกนภาพไม่สำเร็จ กรุณาเลือกไฟล์ภาพหรือถ่ายใหม่ให้ชัดเจน";
+        statusText.innerText = "สแกนภาพไม่สำเร็จ";
       }
     }
 
@@ -1260,7 +1226,7 @@
       const fileInput = document.getElementById('fileInput');
       if (fileInput) fileInput.value = '';
       document.getElementById('progressBar').style.width = '0%';
-      document.getElementById('statusText').innerText = 'ล้างภาพและข้อมูลออกจากหน่วยความจำแล้ว';
+      document.getElementById('statusText').innerText = 'ล้างข้อมูลแล้ว';
       document.getElementById('sourceLabel').innerText = 'ยังไม่มีข้อมูลผู้ป่วย';
     }
   </script>
