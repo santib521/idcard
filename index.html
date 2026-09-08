@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MKT Register V10.52 - Name Focused Frame</title>
+  <title>MKT Register V10.53 - Name Focus Gate</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -28,7 +28,7 @@
         <i data-lucide="shield-check" class="w-6 h-6"></i>
         <div>
           <h1 class="text-base font-bold leading-tight">ระบบลงทะเบียนผู้ป่วย</h1>
-          <p class="text-[10px] text-teal-200">MKT Smart Register V10.52 (Name Focused Frame)</p>
+          <p class="text-[10px] text-teal-200">MKT Smart Register V10.53 (Name Focus Gate)</p>
         </div>
       </div>
       <span class="text-xs bg-teal-800 border border-teal-500/30 text-teal-100 px-2.5 py-1 rounded-full font-mono">ACS ACR39U Ready</span>
@@ -225,8 +225,8 @@
     let previousQualityFrame = null;
     let bestObservedSharpness = 0;
     let cameraQualitySamples = 0;
+    let bestNameSharpness = 0;
     let cameraReadyUntil = 0;
-    let lastBestNameFrame = null;
 
     async function waitForLocalAgent(maxAttempts = 12) {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -551,7 +551,7 @@
       return score;
     }
 
-    function analyzeCameraQuality(canvas) {
+    function analyzeCameraQuality(canvas, trackMotion = true) {
       const sample = document.createElement('canvas');
       sample.width = 180;
       sample.height = Math.max(1, Math.round(canvas.height * sample.width / canvas.width));
@@ -577,11 +577,11 @@
         }
       }
       let motion = 0;
-      if (previousQualityFrame && previousQualityFrame.length === gray.length) {
+      if (trackMotion && previousQualityFrame && previousQualityFrame.length === gray.length) {
         for (let p = 0; p < gray.length; p += 4) motion += Math.abs(gray[p] - previousQualityFrame[p]);
         motion /= Math.ceil(gray.length / 4);
       }
-      previousQualityFrame = gray;
+      if (trackMotion) previousQualityFrame = gray;
       return {
         brightness: brightness / gray.length,
         glare: glare / gray.length,
@@ -596,8 +596,11 @@
       const frame = document.createElement('canvas');
       drawGuideQualitySample(video, frame);
       const quality = analyzeCameraQuality(frame);
+      const nameFrame = cropRegionCanvas(frame, 0.12, 0.13, 0.64, 0.21, 1);
+      const nameQuality = analyzeCameraQuality(nameFrame, false);
       cameraQualitySamples++;
       bestObservedSharpness = Math.max(bestObservedSharpness * 0.995, quality.sharpness);
+      bestNameSharpness = Math.max(bestNameSharpness * 0.995, nameQuality.sharpness);
 
       let rawReady = false;
       let message = 'กำลังตรวจ Focus...';
@@ -605,14 +608,15 @@
       else if (quality.glare > 0.16) message = 'มีแสงสะท้อน • เอียงบัตรเล็กน้อย';
       else if (cameraQualitySamples > 2 && quality.motion > 14) message = 'ภาพกำลังสั่น • ถือ Tablet ให้นิ่ง';
       else if (cameraQualitySamples < 3 || quality.sharpness < Math.max(4.5, bestObservedSharpness * 0.72)) message = 'กำลัง Focus • แตะภาพหากยังไม่ชัด';
+      else if (nameQuality.sharpness < Math.max(6, bestNameSharpness * 0.80)) message = 'บริเวณชื่อยังไม่ชัด • แตะตรงบรรทัดชื่อ';
       else {
         rawReady = true;
-        message = 'พร้อมถ่าย • ภาพนิ่งและ Focus ผ่าน';
+        message = 'พร้อมถ่าย • บรรทัดชื่อ Focus ผ่าน';
       }
 
       if (rawReady) cameraReadyUntil = Date.now() + 2500;
       const ready = rawReady || Date.now() < cameraReadyUntil;
-      if (ready && !rawReady) message = 'พร้อมถ่าย • ล็อกคุณภาพไว้ให้กดถ่าย';
+      if (ready && !rawReady) message = 'พร้อมถ่าย • ล็อกกรอบเขียวไว้ 2.5 วินาที';
 
       const guide = document.getElementById('cardGuideFrame');
       const hint = document.getElementById('cameraHint');
@@ -628,6 +632,7 @@
       stopCameraQualityMonitor();
       previousQualityFrame = null;
       bestObservedSharpness = 0;
+      bestNameSharpness = 0;
       cameraQualitySamples = 0;
       cameraReadyUntil = 0;
       cameraQualityTimer = setInterval(updateCameraAssist, 450);
@@ -643,8 +648,6 @@
     async function captureBestFocusedFrame(video, outputCanvas) {
       let bestCanvas = null;
       let bestScore = -1;
-      let bestNameCanvas = null;
-      let bestNameScore = -1;
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt) await new Promise(resolve => setTimeout(resolve, 180));
         const candidate = document.createElement('canvas');
@@ -654,14 +657,7 @@
           bestScore = score;
           bestCanvas = candidate;
         }
-        const nameZone = cropRegionCanvas(candidate, 0.12, 0.13, 0.64, 0.21, 1);
-        const nameScore = estimateSharpness(nameZone);
-        if (nameScore > bestNameScore) {
-          bestNameScore = nameScore;
-          bestNameCanvas = candidate;
-        }
       }
-      lastBestNameFrame = bestNameCanvas;
       outputCanvas.width = bestCanvas.width;
       outputCanvas.height = bestCanvas.height;
       outputCanvas.getContext('2d').drawImage(bestCanvas, 0, 0);
@@ -684,7 +680,6 @@
     }
 
     function handleFileSelect(e) {
-      lastBestNameFrame = null;
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
@@ -1067,7 +1062,7 @@
 
       try {
         statusText.innerText = inputMode === 'camera'
-          ? "กำลังเตรียมเฟรมหลักและเฟรมชื่อ (V10.52)..."
+          ? "กำลังเตรียมเฟรมที่ชัดที่สุดจากกล้อง (V10.48)..."
           : "กำลังเตรียม Browse OCR ที่ผ่านการทดสอบ...";
         cropFaceFromCanvas(fullCanvas);
 
@@ -1101,13 +1096,7 @@
         // V10.40 path: value-only single-line crop produces the verified name.
         progressBar.style.width = '72%';
         statusText.innerText = "กำลังอ่านชื่อด้วยกรอบบรรทัดเดียวแบบ V10.40...";
-        // ID/DOB/Address remain on the V10.50 main frame. Only Name may use
-        // the frame that scored sharpest specifically inside the name band.
-        const namePreparedCanvas = inputMode === 'camera' && lastBestNameFrame
-          ? prepareCardCanvas(lastBestNameFrame)
-          : preparedCanvas;
-        const nameDataUrl = cropIsolatedNameCanvas(namePreparedCanvas).toDataURL('image/png');
-        lastBestNameFrame = null;
+        const nameDataUrl = cropIsolatedNameCanvas(preparedCanvas).toDataURL('image/png');
         await worker.setParameters({
           preserve_interword_spaces: '1',
           user_defined_dpi: '300',
@@ -1125,7 +1114,7 @@
         if (inputMode === 'camera' && !isCompleteThaiName(extractedName)) {
           progressBar.style.width = '76%';
           statusText.innerText = "กำลังอ่านชื่อซ้ำด้วยกรอบกว้าง...";
-          const wideNameCanvas = cropCameraNameBand(namePreparedCanvas);
+          const wideNameCanvas = cropCameraNameBand(preparedCanvas);
           await worker.setParameters({
             preserve_interword_spaces: '1',
             user_defined_dpi: '300',
@@ -1199,8 +1188,8 @@
         const extractedID = idDigits ? formatIDCard(idDigits) : '';
 
         const sourceVersion = inputMode === 'camera'
-          ? `V10.52 V10.50 Base + V10.48 Name Method (${confidence}%)`
-          : `V10.52 Browse Locked V10.43 (${confidence}%)`;
+          ? `V10.53 V10.50 OCR + Name Focus Gate (${confidence}%)`
+          : `V10.53 Browse Locked V10.43 (${confidence}%)`;
         fillFormData(extractedID, extractedName, extractedDOB, extractedAddress, null, sourceVersion);
 
         progressBar.style.width = '100%';
